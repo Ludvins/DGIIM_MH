@@ -1,0 +1,15 @@
+[package]
+name = "k_nn"
+version = "0.1.0"
+authors = ["Ludvins <theludvins@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+csv = "1.0.5"
+rand = "0.6.5"
+rustc-serialize = "0.3.24"
+time = "0.1.42"
+io = "0.0.2"
+serde_derive = "1.0.89"
+serde = "1.0.89"
+arff = "0.3.0"
