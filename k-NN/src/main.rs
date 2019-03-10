@@ -5,7 +5,6 @@ extern crate serde_derive;
 
 use std::collections::HashMap;
 
-#[allow(non_snake_case)]
 #[derive(Copy, Clone)]
 struct Texture {
     _id: i32,
@@ -56,9 +55,8 @@ fn make_partitions(data: Vec<Texture>) -> Vec<Vec<Texture>> {
 
 fn test() -> Result<(), Box<std::error::Error>> {
     // TODO Normalize data in csv
-
     let _rng = rand::thread_rng();
-    // Con particiones
+
     let folds = 5;
 
     let mut csv_reader = csv::Reader::from_path("data/csv_result-texture.csv")?;
