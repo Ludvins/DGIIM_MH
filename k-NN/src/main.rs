@@ -94,7 +94,6 @@ pub fn _1_nn<T: Data<T> + Clone + Copy>(
             let mut min_distance: f32 = std::f32::MAX;
 
             for known in knowledge.iter() {
-                //NOTE Distance with weights
                 let distance = result.euclidean_distance(known);
 
                 if distance < min_distance {
@@ -229,11 +228,10 @@ pub fn relief<T: Data<T> + Clone + Copy>(
     Ok(())
 }
 
-pub fn relief_texture() -> Result<(), Box<std::error::Error>> {
+pub fn _1_nn_texture() -> Result<(), Box<std::error::Error>> {
     let _rng = rand::thread_rng();
 
     let mut csv_reader = csv::Reader::from_path("data/csv_result-texture.csv")?;
-    println!("Csv file read.");
     let mut data: Vec<Texture> = Vec::new();
     let _atributes: usize = 40;
 
@@ -258,13 +256,50 @@ pub fn relief_texture() -> Result<(), Box<std::error::Error>> {
 
         data.push(aux_record);
     }
+    println!("Resultados 1-NN:");
+    return _1_nn(&data, 5);
+}
 
+pub fn relief_texture() -> Result<(), Box<std::error::Error>> {
+    let _rng = rand::thread_rng();
+
+    let mut csv_reader = csv::Reader::from_path("data/csv_result-texture.csv")?;
+    let mut data: Vec<Texture> = Vec::new();
+    let _atributes: usize = 40;
+
+    // NOTE CSV -> Data.
+    for result in csv_reader.records() {
+        let mut aux_record = Texture::new();
+        let record = result?;
+        let mut counter = 0;
+
+        for field in record.iter() {
+            // CSV structure: id , ... 40 data ... , class
+            if counter == 0 {
+                aux_record._id = field.parse::<i32>().unwrap();
+            } else if counter != 41 {
+                aux_record._attrs[counter - 1] = field.parse::<f32>().unwrap();
+            } else {
+                aux_record._class = field.parse::<i32>().unwrap();
+            }
+
+            counter += 1;
+        }
+
+        data.push(aux_record);
+    }
+    println!("Resultados Relief:");
     return relief(&data, 5, 40);
 }
 
 fn main() {
+    if let Err(err) = _1_nn_texture() {
+        println!("error running 1-nn: {}", err);
+        std::process::exit(1);
+    }
+
     if let Err(err) = relief_texture() {
-        println!("error running text: {}", err);
+        println!("error running relief: {}", err);
         std::process::exit(1);
     }
 }
