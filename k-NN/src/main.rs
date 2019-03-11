@@ -67,6 +67,58 @@ fn make_partitions<T: Data<T> + Clone + Copy>(data: Vec<T>, folds: usize) -> Vec
     return partitions;
 }
 
+pub fn _1_nn<T: Data<T> + Clone + Copy>(
+    data: &Vec<T>,
+    folds: usize,
+) -> Result<(), Box<std::error::Error>> {
+    let data: Vec<Vec<T>> = make_partitions(data.clone(), folds);
+    // NOTE For each partition
+    for i in 0..folds {
+        // NOTE Test over partition i
+        let mut _correct = 0;
+        let mut _attempts = 0;
+        let mut knowledge: Vec<T> = Vec::new();
+
+        // Learning from all other partitions.
+        for j in 0..folds {
+            if j != i {
+                knowledge.extend(data[j].iter().cloned());
+            }
+        }
+
+        // NOTE Test
+        for result in data[i].iter() {
+            _attempts += 1;
+
+            let mut nearest_example: T = T::new();
+            let mut min_distance: f32 = std::f32::MAX;
+
+            for known in knowledge.iter() {
+                //NOTE Distance with weights
+                let distance = result.euclidean_distance(known);
+
+                if distance < min_distance {
+                    min_distance = distance;
+                    nearest_example = known.clone();
+                }
+            }
+
+            if nearest_example.get_class() == (*result).get_class() {
+                _correct += 1;
+            }
+        }
+        println!(
+            "Total aciertos en test {}: {}/{} = {}",
+            i,
+            _correct,
+            _attempts,
+            _correct as f32 / _attempts as f32
+        );
+    }
+
+    Ok(())
+}
+
 pub fn relief<T: Data<T> + Clone + Copy>(
     data: &Vec<T>,
     folds: usize,
@@ -145,6 +197,7 @@ pub fn relief<T: Data<T> + Clone + Copy>(
             let mut min_distance: f32 = std::f32::MAX;
 
             for known in knowledge.iter() {
+                //NOTE Distance with weights
                 let mut distance = 0.0;
                 for index in 0..atributes {
                     distance += _weights[index]
