@@ -1,26 +1,45 @@
 extern crate csv;
+extern crate generic_array;
 extern crate rand;
 extern crate rustc_serialize;
 extern crate serde_derive;
 
 use std::collections::HashMap;
 
-#[derive(Copy, Clone)]
-struct Texture {
-    _id: i32,
-    _attrs: [f32; 40],
-    _class: i32,
+pub trait Data<T> {
+    fn new() -> T;
+    fn get_class(self) -> i32;
+    fn get_id(self) -> i32;
+    fn get_attr(self, index: usize) -> f32;
+    fn euclidean_distance(self, other: &T) -> f32;
 }
-impl Texture {
-    pub fn new() -> Texture {
+
+#[derive(Copy, Clone)]
+pub struct Texture {
+    pub _id: i32,
+    pub _attrs: [f32; 40],
+    pub _class: i32,
+}
+impl Texture {}
+
+impl Data<Texture> for Texture {
+    fn get_class(self) -> i32 {
+        return self._class;
+    }
+    fn get_id(self) -> i32 {
+        return self._id;
+    }
+    fn get_attr(self, index: usize) -> f32 {
+        return self._attrs[index];
+    }
+    fn new() -> Texture {
         Texture {
             _id: -1,
             _attrs: [0.0; 40],
             _class: -1,
         }
     }
-
-    pub fn euclidean_distance(self, other: &Texture) -> f32 {
+    fn euclidean_distance(self, other: &Texture) -> f32 {
         let mut sum = 0.0;
         for index in 0..40 {
             sum += (self._attrs[index] - other._attrs[index])
@@ -28,32 +47,19 @@ impl Texture {
         }
         return sum.sqrt();
     }
-
-    pub fn euclidean_distance_with_weights(self, other: &Texture, w: [f32; 40]) -> f32 {
-        let mut sum = 0.0;
-        for index in 0..40 {
-            sum += w[index]
-                * (self._attrs[index] - other._attrs[index])
-                * (self._attrs[index] - other._attrs[index])
-        }
-
-        return sum.sqrt();
-    }
 }
 
-fn make_partitions(data: Vec<Texture>) -> Vec<Vec<Texture>> {
-    let folds = 5;
-
+fn make_partitions<T: Data<T> + Clone + Copy>(data: Vec<T>, folds: usize) -> Vec<Vec<T>> {
     let mut categories_count = HashMap::new();
-    let mut partitions: Vec<Vec<Texture>> = Vec::new();
+    let mut partitions: Vec<Vec<T>> = Vec::new();
 
     for _ in 0..folds {
         partitions.push(Vec::new());
     }
 
     for example in data {
-        let counter = categories_count.entry(example._class).or_insert(0);
-        partitions[*counter].push(example);
+        let counter = categories_count.entry(example.get_class()).or_insert(0);
+        partitions[*counter].push(example.clone());
 
         *counter = (*counter + 1) % folds;
     }
@@ -61,11 +67,117 @@ fn make_partitions(data: Vec<Texture>) -> Vec<Vec<Texture>> {
     return partitions;
 }
 
-fn test() -> Result<(), Box<std::error::Error>> {
-    // TODO Normalize data in csv
-    let _rng = rand::thread_rng();
+pub fn relief<T: Data<T> + Clone + Copy>(
+    data: &Vec<T>,
+    folds: usize,
+    atributes: usize,
+) -> Result<(), Box<std::error::Error>> {
+    let mut _weights: [f32; 40] = [0.0; 40];
 
-    let folds = 5;
+    let data: Vec<Vec<T>> = make_partitions(data.clone(), folds);
+    // NOTE For each partition
+    for i in 0..folds {
+        // NOTE Test over partition i
+        let mut _correct = 0;
+        let mut _attempts = 0;
+        let mut knowledge: Vec<T> = Vec::new();
+
+        // Learning from all other partitions.
+        for j in 0..folds {
+            if j != i {
+                knowledge.extend(data[j].iter().cloned());
+            }
+        }
+
+        // NOTE Greedy
+        for known in knowledge.iter() {
+            let mut enemy: T = T::new();
+            let mut ally: T = T::new();
+            let mut enemy_distance = std::f32::MAX;
+            let mut friend_distance = std::f32::MAX;
+
+            for candidate in knowledge.iter() {
+                //NOTE Skip if cantidate == known
+                if candidate.get_id() != known.get_id() {
+                    // NOTE Pre-calculate distance
+                    let dist = known.euclidean_distance(candidate);
+                    // NOTE Ally
+                    if known.get_class() == candidate.get_class() {
+                        if dist < friend_distance {
+                            ally = candidate.clone();
+                            friend_distance = dist;
+                        }
+                    }
+                    // NOTE Enemy
+                    else {
+                        if dist < enemy_distance {
+                            enemy = candidate.clone();
+                            enemy_distance = dist;
+                        }
+                    }
+                }
+            }
+            // NOTE Re-calculate weights
+            let mut highest_weight: f32 = _weights[0];
+            for attr in 0..atributes {
+                _weights[attr] += f32::abs(known.get_attr(attr) - enemy.get_attr(attr))
+                    - f32::abs(known.get_attr(attr) - ally.get_attr(attr));
+
+                if _weights[attr] > highest_weight {
+                    highest_weight = _weights[attr];
+                }
+                if _weights[attr] < 0.0 {
+                    _weights[attr] = 0.0;
+                }
+            }
+
+            // NOTE Normalize weights
+            for attr in 0..atributes {
+                _weights[attr] = _weights[attr] / highest_weight;
+            }
+        } // NOTE END Greedy
+
+        // NOTE Test
+        for result in data[i].iter() {
+            _attempts += 1;
+
+            let mut nearest_example: T = T::new();
+            let mut min_distance: f32 = std::f32::MAX;
+
+            for known in knowledge.iter() {
+                let mut distance = 0.0;
+                for index in 0..atributes {
+                    distance += _weights[index]
+                        * (result.get_attr(index) - known.get_attr(index))
+                        * (result.get_attr(index) - known.get_attr(index))
+                }
+
+                distance = distance.sqrt();
+
+                if distance < min_distance {
+                    min_distance = distance;
+                    nearest_example = known.clone();
+                }
+            }
+
+            if nearest_example.get_class() == (*result).get_class() {
+                _correct += 1;
+            }
+        }
+        println!(
+            "Total aciertos en test {}: {}/{} = {}",
+            i,
+            _correct,
+            _attempts,
+            _correct as f32 / _attempts as f32
+        );
+    }
+
+    Ok(())
+}
+
+pub fn relief_texture() -> Result<(), Box<std::error::Error>> {
+    let _rng = rand::thread_rng();
 
     let mut csv_reader = csv::Reader::from_path("data/csv_result-texture.csv")?;
     println!("Csv file read.");
@@ -94,107 +206,11 @@ fn test() -> Result<(), Box<std::error::Error>> {
         data.push(aux_record);
     }
 
-    let mut _weights: [f32; 40] = [0.0; 40];
-
-    let data: Vec<Vec<Texture>> = make_partitions(data);
-
-    // NOTE Greedy iterations
-    for _ in 0..100 {
-        // NOTE For each partition
-        for i in 0..folds {
-            // NOTE Test over partition i
-            let mut _correct = 0;
-            let mut _attempts = 0;
-            let mut knowledge: Vec<Texture> = Vec::new();
-
-            // Learning from all other partitions.
-            for j in 0..folds {
-                if j != i {
-                    knowledge.extend(data[j].iter().cloned());
-                }
-            }
-
-            // NOTE Greedy
-            for example in knowledge.iter() {
-                let mut best_enemy: Texture = Texture::new();
-                let mut best_ally: Texture = Texture::new();
-                let mut enemy_distance = std::f32::MAX;
-                let mut friend_distance = std::f32::MAX;
-
-                for other in knowledge.iter() {
-                    // NOTE Ally
-                    if example._class == other._class {
-                        if other._id != example._id {
-                            let dist = example.euclidean_distance(other);
-                            if dist < friend_distance {
-                                best_ally = *other;
-                                friend_distance = dist;
-                            }
-                        }
-                    }
-                    // NOTE Enemy
-                    else {
-                        let dist = example.euclidean_distance(other);
-                        if dist < enemy_distance {
-                            best_enemy = *other;
-                            enemy_distance = dist;
-                        }
-                    }
-                }
-                // NOTE Re-calculate weights
-                let mut highest_weight: f32 = _weights[0];
-                for attr in 0.._atributes {
-                    _weights[attr] += f32::abs(example._attrs[attr] - best_enemy._attrs[attr])
-                        - f32::abs(example._attrs[attr] - best_ally._attrs[attr]);
-
-                    if _weights[attr] > highest_weight {
-                        highest_weight = _weights[attr];
-                    }
-                    if _weights[attr] < 0.0 {
-                        _weights[attr] = 0.0;
-                    }
-                }
-
-                // NOTE Normalize weights
-                for attr in 0.._atributes {
-                    _weights[attr] = _weights[attr] / highest_weight;
-                }
-            } // NOTE END Greedy
-
-            // NOTE Test
-            for result in data[i].iter() {
-                _attempts += 1;
-
-                let mut nearest_example: Texture = Texture::new();
-                let mut min_distance: f32 = std::f32::MAX;
-
-                for known in knowledge.iter().cloned() {
-                    let distance = (*result).euclidean_distance_with_weights(&known, _weights);
-                    if distance < min_distance {
-                        min_distance = distance;
-                        nearest_example = known.clone();
-                    }
-                }
-
-                if nearest_example._class == (*result)._class {
-                    _correct += 1;
-                }
-            }
-            println!(
-                "Total aciertos en test {}: {}/{} = {}",
-                i,
-                _correct,
-                _attempts,
-                _correct as f32 / _attempts as f32
-            );
-        }
-    }
-
-    Ok(())
+    return relief(&data, 5, 40);
 }
 
 fn main() {
-    if let Err(err) = test() {
+    if let Err(err) = relief_texture() {
         println!("error running text: {}", err);
         std::process::exit(1);
     }
