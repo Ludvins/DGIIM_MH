@@ -28,75 +28,46 @@ fn make_partitions<T: Data<T> + Clone + Copy>(data: &Vec<T>, folds: usize) -> Ve
     return partitions;
 }
 
-pub fn _1_nn<T: Data<T> + Clone + Copy>(
-    data: &Vec<Vec<T>>,
-    folds: usize,
-) -> Result<(), Box<std::error::Error>> {
-    let begin = Instant::now();
+pub fn _1nn_test<T: Data<T> + Clone + Copy>(knowledge: &Vec<T>, exam: &Vec<T>) -> i32 {
+    let mut _correct: i32 = 0;
+    for item in exam.iter() {
+        let mut nearest_example: T = T::new();
+        let mut min_distance: f32 = std::f32::MAX;
 
-    // NOTE For each partition
-    for i in 0..folds {
-        // NOTE Test over partition i
-        let mut _correct = 0;
-        let mut _attempts = 0;
+        for known in knowledge.iter() {
+            let distance = item.euclidean_distance(known);
 
-        let mut knowledge: Vec<T> = Vec::new();
-
-        // Learning from all other partitions.
-        for j in 0..folds {
-            if j != i {
-                knowledge.extend(&data[j]);
+            if distance < min_distance {
+                min_distance = distance;
+                nearest_example = known.clone();
             }
         }
 
-        // NOTE Test
-        for result in data[i].iter() {
-            _attempts += 1;
-
-            let mut nearest_example: T = T::new();
-            let mut min_distance: f32 = std::f32::MAX;
-
-            for known in knowledge.iter() {
-                let distance = result.euclidean_distance(known);
-
-                if distance < min_distance {
-                    min_distance = distance;
-                    nearest_example = known.clone();
-                }
-            }
-
-            if nearest_example.get_class() == result.get_class() {
-                _correct += 1;
-            }
+        if nearest_example.get_class() == item.get_class() {
+            _correct += 1;
         }
-
-        println!(
-            "Total aciertos en test {}: {}/{} = {}",
-            i,
-            _correct,
-            _attempts,
-            _correct as f32 / _attempts as f32
-        );
     }
+
     println!(
-        "Tiempo transcurrido: {} milisegundos.",
-        begin.elapsed().as_millis()
+        "\t\tTotal aciertos en test: {}/{} = {}",
+        _correct,
+        exam.len(),
+        _correct as f32 / exam.len() as f32
     );
 
-    Ok(())
+    return _correct;
 }
 
 pub fn relief<T: Data<T> + Clone + Copy>(
     data: &Vec<Vec<T>>,
     folds: usize,
-    atributes: usize,
+    attributes: usize,
+    total_attempts: f32,
     discard_low_weights: bool,
 ) -> Result<(), Box<std::error::Error>> {
-    let begin = Instant::now();
     let mut total_correct = 0;
-
     let mut _weights: Vec<f32> = Vec::new();
-    for _ in 0..atributes {
+    for _ in 0..attributes {
         _weights.push(0.0);
     }
 
@@ -145,7 +116,7 @@ pub fn relief<T: Data<T> + Clone + Copy>(
             }
             // NOTE Re-calculate weights
             let mut highest_weight: f32 = _weights[0];
-            for attr in 0..atributes {
+            for attr in 0..attributes {
                 _weights[attr] += f32::abs(known.get_attr(attr) - enemy.get_attr(attr))
                     - f32::abs(known.get_attr(attr) - ally.get_attr(attr));
 
@@ -160,7 +131,7 @@ pub fn relief<T: Data<T> + Clone + Copy>(
             }
 
             // NOTE Normalize weights
-            for attr in 0..atributes {
+            for attr in 0..attributes {
                 _weights[attr] = _weights[attr] / highest_weight;
             }
         } // NOTE END Greedy
@@ -175,7 +146,7 @@ pub fn relief<T: Data<T> + Clone + Copy>(
             for known in knowledge.iter() {
                 //NOTE Distance with weights
                 let mut distance = 0.0;
-                for index in 0..atributes {
+                for index in 0..attributes {
                     // NOTE weights below 0.2 aren't considered.
                     if discard_low_weights || _weights[index] >= 0.2 {
                         distance += _weights[index]
@@ -198,21 +169,15 @@ pub fn relief<T: Data<T> + Clone + Copy>(
         }
 
         total_correct += _correct;
-
         println!(
-            "Total aciertos en test {}: {}/{} = {}",
+            "\t\tTotal aciertos en test {}: {}/{} = {}",
             i,
             _correct,
             _attempts,
             _correct as f32 / _attempts as f32
         );
     }
-    println!(
-        "Tiempo transcurrido: {} milisegundos.",
-        begin.elapsed().as_millis()
-    );
 
-    //println!("Vector de pesos: {:?}", _weights);
     let mut reduction: f32 = 0.0;
 
     for w in _weights {
@@ -220,69 +185,73 @@ pub fn relief<T: Data<T> + Clone + Copy>(
             reduction += 1.0;
         }
     }
-    reduction = 100.0 * reduction / 40.0;
+    reduction = 100.0 * reduction / attributes as f32;
 
-    let f = 0.5 * reduction + 0.5 * (100.0 * total_correct as f32 / 550.0);
+    let f = 0.5 * reduction + 0.5 * (100.0 * total_correct as f32 / total_attempts);
 
     println!(
-        "Tasa Reducción: {} \nFunción de evaluación: {}",
-        reduction, f
+        "\t\tTasa Reducción: {} \n\t\tPorcentaje acertados: {}\n\t\tFunción de evaluación: {}",
+        reduction,
+        100.0 * total_correct as f32 / total_attempts,
+        f
     );
 
     Ok(())
 }
 
-pub fn _1_nn_texture() -> Result<(), Box<std::error::Error>> {
-    let mut csv_reader = csv::Reader::from_path("data/csv_result-texture.csv")?;
-    let mut data: Vec<Texture> = Vec::new();
-    let _atributes: usize = 40;
+pub fn _1_nn_loop<T: Data<T> + Clone + Copy>(
+    data: &Vec<Vec<T>>,
+    _atributes: usize,
+    _folds: usize,
+    _total: f32,
+) -> Result<(), Box<std::error::Error>> {
+    let mut _correct = 0;
+    for i in 0.._folds {
+        // NOTE Test over partition i
 
-    // NOTE CSV -> Data.
-    for result in csv_reader.records() {
-        let mut aux_record = Texture::new();
-        let record = result?;
-        let mut counter = 0;
+        let mut knowledge: Vec<T> = Vec::new();
 
-        for field in record.iter() {
-            // NOTE CSV structure: id , ... 40 data ... , class
-            if counter == 0 {
-                aux_record._id = field.parse::<i32>().unwrap();
-            } else if counter != 41 {
-                aux_record._attrs[counter - 1] = field.parse::<f32>().unwrap();
-            } else {
-                aux_record._class = field.parse::<i32>().unwrap();
+        // Learning from all other partitions.
+        for j in 0.._folds {
+            if j != i {
+                knowledge.extend(&data[j]);
             }
-
-            counter += 1;
         }
 
-        data.push(aux_record);
+        _correct += _1nn_test(&knowledge, &data[i]);
     }
+    println!(
+        "\t\tResultados finales: {}/{} = {}",
+        _correct,
+        550,
+        _correct as f32 / _total
+    );
 
-    let data: Vec<Vec<Texture>> = make_partitions(&data, 5);
-    println!("Resultados 1-NN:");
-    return _1_nn(&data, 5);
+    Ok(())
 }
 
-pub fn relief_texture() -> Result<(), Box<std::error::Error>> {
-    let mut csv_reader = csv::Reader::from_path("data/csv_result-texture.csv")?;
-    let mut data: Vec<Texture> = Vec::new();
-    let _atributes: usize = 40;
-
+fn run<T: Data<T> + Clone + Copy>(
+    _path: String,
+    _attributes: usize,
+    _folds: usize,
+) -> Result<(), Box<std::error::Error>> {
+    //NOTE Read CSV
+    let mut csv_reader = csv::Reader::from_path(_path).expect("Error leyendo el csv");
+    let mut data: Vec<T> = Vec::new();
     // NOTE CSV -> Data.
     for result in csv_reader.records() {
-        let mut aux_record = Texture::new();
+        let mut aux_record = T::new();
         let record = result?;
         let mut counter = 0;
 
         for field in record.iter() {
-            // CSV structure: id , ... 40 data ... , class
+            // NOTE CSV structure: id , ... attributes ... , class
             if counter == 0 {
-                aux_record._id = field.parse::<i32>().unwrap();
-            } else if counter != 41 {
-                aux_record._attrs[counter - 1] = field.parse::<f32>().unwrap();
+                aux_record.set_id(field.parse::<i32>().unwrap());
+            } else if counter != _attributes + 1 {
+                aux_record.set_attr(counter - 1, field.parse::<f32>().unwrap());
             } else {
-                aux_record._class = field.parse::<i32>().unwrap();
+                aux_record.set_class(field.parse::<i32>().unwrap());
             }
 
             counter += 1;
@@ -290,24 +259,44 @@ pub fn relief_texture() -> Result<(), Box<std::error::Error>> {
 
         data.push(aux_record);
     }
+    let size = data.len() as f32;
 
-    let data: Vec<Vec<Texture>> = make_partitions(&data, 5);
+    let data: Vec<Vec<T>> = make_partitions(&data, 5);
 
-    println!("Resultados Relief descartando pesos < 0.2:");
-    relief(&data, 5, 40, true)?;
+    let mut now = Instant::now();
 
-    println!("Resultados Relief sin descartar pesos < 0.2:");
-    return relief(&data, 5, 40, false);
+    println!("\tResultados 1-NN:");
+    _1_nn_loop(&data, _attributes, _folds, size)?;
+
+    println!(
+        "\t Tiempo transcurrido: {} milisegundos.\n",
+        now.elapsed().as_millis()
+    );
+
+    now = Instant::now();
+    println!("\tResultados Relief descartando pesos < 0.2:");
+    relief(&data, _folds, _attributes, size, true)?;
+    println!(
+        "\t Tiempo transcurrido: {} milisegundos.\n",
+        now.elapsed().as_millis()
+    );
+
+    now = Instant::now();
+
+    println!("\tResultados Relief sin descartar pesos < 0.2:");
+    relief(&data, _folds, _attributes, size, false)?;
+    println!(
+        "\t Tiempo transcurrido: {} milisegundos.\n",
+        now.elapsed().as_millis()
+    );
+
+    Ok(())
 }
 
 fn main() {
-    if let Err(err) = _1_nn_texture() {
-        println!("error running 1-nn: {}", err);
-        std::process::exit(1);
-    }
-
-    if let Err(err) = relief_texture() {
-        println!("error running relief: {}", err);
+    println!("Resultados para Texture.");
+    if let Err(err) = run::<Texture>(String::from("data/csv_result-texture.csv"), 40, 5) {
+        println!("error running Texture: {}", err);
         std::process::exit(1);
     }
 }
