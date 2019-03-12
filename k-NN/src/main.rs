@@ -29,18 +29,17 @@ fn make_partitions<T: Data<T> + Clone + Copy>(data: &Vec<T>, folds: usize) -> Ve
 }
 
 pub fn _1_nn<T: Data<T> + Clone + Copy>(
-    data: &Vec<T>,
+    data: &Vec<Vec<T>>,
     folds: usize,
 ) -> Result<(), Box<std::error::Error>> {
     let begin = Instant::now();
-
-    let data: Vec<Vec<T>> = make_partitions(data, folds);
 
     // NOTE For each partition
     for i in 0..folds {
         // NOTE Test over partition i
         let mut _correct = 0;
         let mut _attempts = 0;
+
         let mut knowledge: Vec<T> = Vec::new();
 
         // Learning from all other partitions.
@@ -88,13 +87,13 @@ pub fn _1_nn<T: Data<T> + Clone + Copy>(
 }
 
 pub fn relief<T: Data<T> + Clone + Copy>(
-    data: &Vec<T>,
+    data: &Vec<Vec<T>>,
     folds: usize,
     atributes: usize,
+    discard_low_weights: bool,
 ) -> Result<(), Box<std::error::Error>> {
     let begin = Instant::now();
-
-    let data: Vec<Vec<T>> = make_partitions(data, folds);
+    let mut total_correct = 0;
 
     let mut _weights: Vec<f32> = Vec::new();
     for _ in 0..atributes {
@@ -103,9 +102,10 @@ pub fn relief<T: Data<T> + Clone + Copy>(
 
     // NOTE For each partition
     for i in 0..folds {
-        // NOTE Test over partition i
         let mut _correct = 0;
         let mut _attempts = 0;
+
+        // NOTE Test over partition i
         let mut knowledge: Vec<T> = Vec::new();
 
         // Learning from all other partitions.
@@ -176,9 +176,12 @@ pub fn relief<T: Data<T> + Clone + Copy>(
                 //NOTE Distance with weights
                 let mut distance = 0.0;
                 for index in 0..atributes {
-                    distance += _weights[index]
-                        * (result.get_attr(index) - known.get_attr(index))
-                        * (result.get_attr(index) - known.get_attr(index))
+                    // NOTE weights below 0.2 aren't considered.
+                    if discard_low_weights || _weights[index] >= 0.2 {
+                        distance += _weights[index]
+                            * (result.get_attr(index) - known.get_attr(index))
+                            * (result.get_attr(index) - known.get_attr(index))
+                    }
                 }
 
                 distance = distance.sqrt();
@@ -194,6 +197,8 @@ pub fn relief<T: Data<T> + Clone + Copy>(
             }
         }
 
+        total_correct += _correct;
+
         println!(
             "Total aciertos en test {}: {}/{} = {}",
             i,
@@ -205,6 +210,23 @@ pub fn relief<T: Data<T> + Clone + Copy>(
     println!(
         "Tiempo transcurrido: {} milisegundos.",
         begin.elapsed().as_millis()
+    );
+
+    //println!("Vector de pesos: {:?}", _weights);
+    let mut reduction: f32 = 0.0;
+
+    for w in _weights {
+        if w < 0.2 {
+            reduction += 1.0;
+        }
+    }
+    reduction = 100.0 * reduction / 40.0;
+
+    let f = 0.5 * reduction + 0.5 * (100.0 * total_correct as f32 / 550.0);
+
+    println!(
+        "Tasa Reducción: {} \nFunción de evaluación: {}",
+        reduction, f
     );
 
     Ok(())
@@ -236,6 +258,8 @@ pub fn _1_nn_texture() -> Result<(), Box<std::error::Error>> {
 
         data.push(aux_record);
     }
+
+    let data: Vec<Vec<Texture>> = make_partitions(&data, 5);
     println!("Resultados 1-NN:");
     return _1_nn(&data, 5);
 }
@@ -266,8 +290,14 @@ pub fn relief_texture() -> Result<(), Box<std::error::Error>> {
 
         data.push(aux_record);
     }
-    println!("Resultados Relief:");
-    return relief(&data, 5, 40);
+
+    let data: Vec<Vec<Texture>> = make_partitions(&data, 5);
+
+    println!("Resultados Relief descartando pesos < 0.2:");
+    relief(&data, 5, 40, true)?;
+
+    println!("Resultados Relief sin descartar pesos < 0.2:");
+    return relief(&data, 5, 40, false);
 }
 
 fn main() {
