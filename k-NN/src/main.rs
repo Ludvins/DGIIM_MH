@@ -4,50 +4,10 @@ extern crate rand;
 extern crate rustc_serialize;
 extern crate serde_derive;
 
+mod structs;
+
 use std::collections::HashMap;
-
-pub trait Data<T> {
-    fn new() -> T;
-    fn get_class(self) -> i32;
-    fn get_id(self) -> i32;
-    fn get_attr(self, index: usize) -> f32;
-    fn euclidean_distance(self, other: &T) -> f32;
-}
-
-#[derive(Copy, Clone)]
-pub struct Texture {
-    pub _id: i32,
-    pub _attrs: [f32; 40],
-    pub _class: i32,
-}
-impl Texture {}
-
-impl Data<Texture> for Texture {
-    fn get_class(self) -> i32 {
-        return self._class;
-    }
-    fn get_id(self) -> i32 {
-        return self._id;
-    }
-    fn get_attr(self, index: usize) -> f32 {
-        return self._attrs[index];
-    }
-    fn new() -> Texture {
-        Texture {
-            _id: -1,
-            _attrs: [0.0; 40],
-            _class: -1,
-        }
-    }
-    fn euclidean_distance(self, other: &Texture) -> f32 {
-        let mut sum = 0.0;
-        for index in 0..40 {
-            sum += (self._attrs[index] - other._attrs[index])
-                * (self._attrs[index] - other._attrs[index])
-        }
-        return sum.sqrt();
-    }
-}
+use structs::*;
 
 fn make_partitions<T: Data<T> + Clone + Copy>(data: Vec<T>, folds: usize) -> Vec<Vec<T>> {
     let mut categories_count = HashMap::new();
@@ -229,8 +189,6 @@ pub fn relief<T: Data<T> + Clone + Copy>(
 }
 
 pub fn _1_nn_texture() -> Result<(), Box<std::error::Error>> {
-    let _rng = rand::thread_rng();
-
     let mut csv_reader = csv::Reader::from_path("data/csv_result-texture.csv")?;
     let mut data: Vec<Texture> = Vec::new();
     let _atributes: usize = 40;
@@ -242,7 +200,7 @@ pub fn _1_nn_texture() -> Result<(), Box<std::error::Error>> {
         let mut counter = 0;
 
         for field in record.iter() {
-            // CSV structure: id , ... 40 data ... , class
+            // NOTE CSV structure: id , ... 40 data ... , class
             if counter == 0 {
                 aux_record._id = field.parse::<i32>().unwrap();
             } else if counter != 41 {
@@ -261,8 +219,6 @@ pub fn _1_nn_texture() -> Result<(), Box<std::error::Error>> {
 }
 
 pub fn relief_texture() -> Result<(), Box<std::error::Error>> {
-    let _rng = rand::thread_rng();
-
     let mut csv_reader = csv::Reader::from_path("data/csv_result-texture.csv")?;
     let mut data: Vec<Texture> = Vec::new();
     let _atributes: usize = 40;
