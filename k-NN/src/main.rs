@@ -1,15 +1,15 @@
 extern crate csv;
-extern crate generic_array;
-extern crate rand;
-extern crate rustc_serialize;
 extern crate serde_derive;
+
+//use std::sync::{Arc, Mutex}; //TODO Concurrency
+//use std::thread;
 
 mod structs;
 
 use std::collections::HashMap;
 use structs::*;
 
-fn make_partitions<T: Data<T> + Clone + Copy>(data: Vec<T>, folds: usize) -> Vec<Vec<T>> {
+fn make_partitions<T: Data<T> + Clone + Copy>(data: &Vec<T>, folds: usize) -> Vec<Vec<T>> {
     let mut categories_count = HashMap::new();
     let mut partitions: Vec<Vec<T>> = Vec::new();
 
@@ -31,7 +31,8 @@ pub fn _1_nn<T: Data<T> + Clone + Copy>(
     data: &Vec<T>,
     folds: usize,
 ) -> Result<(), Box<std::error::Error>> {
-    let data: Vec<Vec<T>> = make_partitions(data.clone(), folds);
+    let data: Vec<Vec<T>> = make_partitions(data, folds);
+
     // NOTE For each partition
     for i in 0..folds {
         // NOTE Test over partition i
@@ -42,7 +43,7 @@ pub fn _1_nn<T: Data<T> + Clone + Copy>(
         // Learning from all other partitions.
         for j in 0..folds {
             if j != i {
-                knowledge.extend(data[j].iter().cloned());
+                knowledge.extend(&data[j]);
             }
         }
 
@@ -62,7 +63,7 @@ pub fn _1_nn<T: Data<T> + Clone + Copy>(
                 }
             }
 
-            if nearest_example.get_class() == (*result).get_class() {
+            if nearest_example.get_class() == result.get_class() {
                 _correct += 1;
             }
         }
@@ -83,9 +84,12 @@ pub fn relief<T: Data<T> + Clone + Copy>(
     folds: usize,
     atributes: usize,
 ) -> Result<(), Box<std::error::Error>> {
-    let mut _weights: [f32; 40] = [0.0; 40];
+    let mut _weights: Vec<f32> = Vec::new();
+    for _ in 0..atributes {
+        _weights.push(0.0);
+    }
 
-    let data: Vec<Vec<T>> = make_partitions(data.clone(), folds);
+    let data: Vec<Vec<T>> = make_partitions(data, folds);
     // NOTE For each partition
     for i in 0..folds {
         // NOTE Test over partition i
@@ -172,7 +176,7 @@ pub fn relief<T: Data<T> + Clone + Copy>(
                 }
             }
 
-            if nearest_example.get_class() == (*result).get_class() {
+            if nearest_example.get_class() == result.get_class() {
                 _correct += 1;
             }
         }
