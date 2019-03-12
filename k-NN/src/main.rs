@@ -7,6 +7,7 @@ extern crate serde_derive;
 mod structs;
 
 use std::collections::HashMap;
+use std::time::Instant;
 use structs::*;
 
 fn make_partitions<T: Data<T> + Clone + Copy>(data: &Vec<T>, folds: usize) -> Vec<Vec<T>> {
@@ -31,6 +32,8 @@ pub fn _1_nn<T: Data<T> + Clone + Copy>(
     data: &Vec<T>,
     folds: usize,
 ) -> Result<(), Box<std::error::Error>> {
+    let begin = Instant::now();
+
     let data: Vec<Vec<T>> = make_partitions(data, folds);
 
     // NOTE For each partition
@@ -67,6 +70,7 @@ pub fn _1_nn<T: Data<T> + Clone + Copy>(
                 _correct += 1;
             }
         }
+
         println!(
             "Total aciertos en test {}: {}/{} = {}",
             i,
@@ -75,6 +79,10 @@ pub fn _1_nn<T: Data<T> + Clone + Copy>(
             _correct as f32 / _attempts as f32
         );
     }
+    println!(
+        "Tiempo transcurrido: {} milisegundos.",
+        begin.elapsed().as_millis()
+    );
 
     Ok(())
 }
@@ -84,12 +92,15 @@ pub fn relief<T: Data<T> + Clone + Copy>(
     folds: usize,
     atributes: usize,
 ) -> Result<(), Box<std::error::Error>> {
+    let begin = Instant::now();
+
+    let data: Vec<Vec<T>> = make_partitions(data, folds);
+
     let mut _weights: Vec<f32> = Vec::new();
     for _ in 0..atributes {
         _weights.push(0.0);
     }
 
-    let data: Vec<Vec<T>> = make_partitions(data, folds);
     // NOTE For each partition
     for i in 0..folds {
         // NOTE Test over partition i
@@ -138,9 +149,11 @@ pub fn relief<T: Data<T> + Clone + Copy>(
                 _weights[attr] += f32::abs(known.get_attr(attr) - enemy.get_attr(attr))
                     - f32::abs(known.get_attr(attr) - ally.get_attr(attr));
 
+                // NOTE Find maximal element for future normalizing.
                 if _weights[attr] > highest_weight {
                     highest_weight = _weights[attr];
                 }
+                // NOTE Truncate negative values as 0.
                 if _weights[attr] < 0.0 {
                     _weights[attr] = 0.0;
                 }
@@ -180,6 +193,7 @@ pub fn relief<T: Data<T> + Clone + Copy>(
                 _correct += 1;
             }
         }
+
         println!(
             "Total aciertos en test {}: {}/{} = {}",
             i,
@@ -188,6 +202,10 @@ pub fn relief<T: Data<T> + Clone + Copy>(
             _correct as f32 / _attempts as f32
         );
     }
+    println!(
+        "Tiempo transcurrido: {} milisegundos.",
+        begin.elapsed().as_millis()
+    );
 
     Ok(())
 }
