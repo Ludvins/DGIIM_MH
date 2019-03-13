@@ -61,13 +61,13 @@ pub fn _1nn_test<T: Data<T> + Clone + Copy>(knowledge: &Vec<T>, exam: &Vec<T>) -
 pub fn relief<T: Data<T> + Clone + Copy>(
     data: &Vec<Vec<T>>,
     folds: usize,
-    attributes: usize,
+    _n_attrs: usize,
     total_attempts: f32,
     discard_low_weights: bool,
 ) -> Result<(), Box<std::error::Error>> {
     let mut total_correct = 0;
     let mut _weights: Vec<f32> = Vec::new();
-    for _ in 0..attributes {
+    for _ in 0.._n_attrs {
         _weights.push(0.0);
     }
 
@@ -116,7 +116,7 @@ pub fn relief<T: Data<T> + Clone + Copy>(
             }
             // NOTE Re-calculate weights
             let mut highest_weight: f32 = _weights[0];
-            for attr in 0..attributes {
+            for attr in 0.._n_attrs {
                 _weights[attr] += f32::abs(known.get_attr(attr) - enemy.get_attr(attr))
                     - f32::abs(known.get_attr(attr) - ally.get_attr(attr));
 
@@ -131,7 +131,7 @@ pub fn relief<T: Data<T> + Clone + Copy>(
             }
 
             // NOTE Normalize weights
-            for attr in 0..attributes {
+            for attr in 0.._n_attrs {
                 _weights[attr] = _weights[attr] / highest_weight;
             }
         } // NOTE END Greedy
@@ -146,7 +146,7 @@ pub fn relief<T: Data<T> + Clone + Copy>(
             for known in knowledge.iter() {
                 //NOTE Distance with weights
                 let mut distance = 0.0;
-                for index in 0..attributes {
+                for index in 0.._n_attrs {
                     // NOTE weights below 0.2 aren't considered.
                     if discard_low_weights || _weights[index] >= 0.2 {
                         distance += _weights[index]
@@ -185,7 +185,7 @@ pub fn relief<T: Data<T> + Clone + Copy>(
             reduction += 1.0;
         }
     }
-    reduction = 100.0 * reduction / attributes as f32;
+    reduction = 100.0 * reduction / _n_attrs as f32;
 
     let f = 0.5 * reduction + 0.5 * (100.0 * total_correct as f32 / total_attempts);
 
@@ -201,7 +201,7 @@ pub fn relief<T: Data<T> + Clone + Copy>(
 
 pub fn _1_nn_loop<T: Data<T> + Clone + Copy>(
     data: &Vec<Vec<T>>,
-    _atributes: usize,
+    _n_attrs: usize,
     _folds: usize,
     _total: f32,
 ) -> Result<(), Box<std::error::Error>> {
@@ -232,7 +232,7 @@ pub fn _1_nn_loop<T: Data<T> + Clone + Copy>(
 
 fn run<T: Data<T> + Clone + Copy>(
     _path: String,
-    _attributes: usize,
+    _n_attrs: usize,
     _folds: usize,
 ) -> Result<(), Box<std::error::Error>> {
     //NOTE Read CSV
@@ -248,7 +248,7 @@ fn run<T: Data<T> + Clone + Copy>(
             // NOTE CSV structure: id , ... attributes ... , class
             if counter == 0 {
                 aux_record.set_id(field.parse::<i32>().unwrap());
-            } else if counter != _attributes + 1 {
+            } else if counter != _n_attrs + 1 {
                 aux_record.set_attr(counter - 1, field.parse::<f32>().unwrap());
             } else {
                 aux_record.set_class(field.parse::<i32>().unwrap());
@@ -260,31 +260,29 @@ fn run<T: Data<T> + Clone + Copy>(
         data.push(aux_record);
     }
     let size = data.len() as f32;
-
     let data: Vec<Vec<T>> = make_partitions(&data, 5);
 
+    //NOTE 1-NN
     let mut now = Instant::now();
-
     println!("\tResultados 1-NN:");
-    _1_nn_loop(&data, _attributes, _folds, size)?;
-
+    _1_nn_loop(&data, _n_attrs, _folds, size)?;
     println!(
         "\t Tiempo transcurrido: {} milisegundos.\n",
         now.elapsed().as_millis()
     );
-
+    //NOTE Relief descartando
     now = Instant::now();
     println!("\tResultados Relief descartando pesos < 0.2:");
-    relief(&data, _folds, _attributes, size, true)?;
+    relief(&data, _folds, _n_attrs, size, true)?;
     println!(
         "\t Tiempo transcurrido: {} milisegundos.\n",
         now.elapsed().as_millis()
     );
 
+    //NOTE Relief sin descartar
     now = Instant::now();
-
     println!("\tResultados Relief sin descartar pesos < 0.2:");
-    relief(&data, _folds, _attributes, size, false)?;
+    relief(&data, _folds, _n_attrs, size, false)?;
     println!(
         "\t Tiempo transcurrido: {} milisegundos.\n",
         now.elapsed().as_millis()
