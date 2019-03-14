@@ -66,15 +66,13 @@ pub fn relief<T: Data<T> + Clone + Copy>(
     discard_low_weights: bool,
 ) -> Result<(), Box<std::error::Error>> {
     let mut total_correct = 0;
-    let mut _weights: Vec<f32> = Vec::new();
-    for _ in 0.._n_attrs {
-        _weights.push(0.0);
-    }
+    let mut _weights: Vec<f32> = vec![0.0; _n_attrs];
 
     // NOTE For each partition
     for i in 0..folds {
         let mut _correct = 0;
         let mut _attempts = 0;
+        let test = data[i].clone();
 
         // NOTE Test over partition i
         let mut knowledge: Vec<T> = Vec::new();
@@ -88,12 +86,12 @@ pub fn relief<T: Data<T> + Clone + Copy>(
 
         // NOTE Greedy
         for known in knowledge.iter() {
-            let mut enemy: T = T::new();
-            let mut ally: T = T::new();
             let mut enemy_distance = std::f32::MAX;
             let mut friend_distance = std::f32::MAX;
+            let mut ally_index = 0;
+            let mut enemy_index = 0;
 
-            for candidate in knowledge.iter() {
+            for (index, candidate) in knowledge.iter().enumerate() {
                 //NOTE Skip if cantidate == known
                 if candidate.get_id() != known.get_id() {
                     // NOTE Pre-calculate distance
@@ -101,19 +99,23 @@ pub fn relief<T: Data<T> + Clone + Copy>(
                     // NOTE Ally
                     if known.get_class() == candidate.get_class() {
                         if dist < friend_distance {
-                            ally = candidate.clone();
+                            ally_index = index;
                             friend_distance = dist;
                         }
                     }
                     // NOTE Enemy
                     else {
                         if dist < enemy_distance {
-                            enemy = candidate.clone();
+                            enemy_index = index;
                             enemy_distance = dist;
                         }
                     }
                 }
             }
+
+            let enemy: T = knowledge[enemy_index].clone();
+            let ally: T = knowledge[ally_index].clone();
+
             // NOTE Re-calculate weights
             let mut highest_weight: f32 = _weights[0];
             for attr in 0.._n_attrs {
@@ -137,7 +139,7 @@ pub fn relief<T: Data<T> + Clone + Copy>(
         } // NOTE END Greedy
 
         // NOTE Test
-        for result in data[i].iter() {
+        for result in test.iter() {
             _attempts += 1;
 
             let mut nearest_example: T = T::new();
@@ -238,20 +240,21 @@ fn run<T: Data<T> + Clone + Copy>(
     //NOTE Read CSV
     let mut csv_reader = csv::Reader::from_path(_path).expect("Error leyendo el csv");
     let mut data: Vec<T> = Vec::new();
+
+    let mut id = 0;
     // NOTE CSV -> Data.
     for result in csv_reader.records() {
         let mut aux_record = T::new();
         let record = result?;
         let mut counter = 0;
-
         for field in record.iter() {
             // NOTE CSV structure: id , ... attributes ... , class
-            if counter == 0 {
-                aux_record.set_id(field.parse::<i32>().unwrap());
-            } else if counter != _n_attrs + 1 {
-                aux_record.set_attr(counter - 1, field.parse::<f32>().unwrap());
+            if counter != _n_attrs {
+                aux_record.set_attr(counter, field.parse::<f32>().unwrap());
             } else {
                 aux_record.set_class(field.parse::<i32>().unwrap());
+                aux_record.set_id(id);
+                id += 1;
             }
 
             counter += 1;
@@ -260,6 +263,7 @@ fn run<T: Data<T> + Clone + Copy>(
         data.push(aux_record);
     }
     let size = data.len() as f32;
+
     let data: Vec<Vec<T>> = make_partitions(&data, 5);
 
     //NOTE 1-NN
@@ -293,7 +297,19 @@ fn run<T: Data<T> + Clone + Copy>(
 
 fn main() {
     println!("Resultados para Texture.");
-    if let Err(err) = run::<Texture>(String::from("data/csv_result-texture.csv"), 40, 5) {
+    if let Err(err) = run::<Texture>(String::from("data/texture_normalizados.csv"), 40, 5) {
+        println!("error running Texture: {}", err);
+        std::process::exit(1);
+    }
+
+    println!("Resultados para Colposcopy.");
+    if let Err(err) = run::<Colposcopy>(String::from("data/colposcopy_normalizados.csv"), 62, 5) {
+        println!("error running Texture: {}", err);
+        std::process::exit(1);
+    }
+
+    println!("Resultados para Ionosphere.");
+    if let Err(err) = run::<Ionosphere>(String::from("data/ionosphere_normalizados.csv"), 34, 5) {
         println!("error running Texture: {}", err);
         std::process::exit(1);
     }
