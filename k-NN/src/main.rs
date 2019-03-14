@@ -49,7 +49,7 @@ pub fn _1nn_test<T: Data<T> + Clone + Copy>(knowledge: &Vec<T>, exam: &Vec<T>) -
     }
 
     println!(
-        "\t\tTotal aciertos en test: {}/{} = {}",
+        "\t\tTest results: {}/{} = {}",
         _correct,
         exam.len(),
         _correct as f32 / exam.len() as f32
@@ -172,7 +172,7 @@ pub fn relief<T: Data<T> + Clone + Copy>(
 
         total_correct += _correct;
         println!(
-            "\t\tTotal aciertos en test {}: {}/{} = {}",
+            "\t\tTest results {}: {}/{} = {}",
             i,
             _correct,
             _attempts,
@@ -192,8 +192,10 @@ pub fn relief<T: Data<T> + Clone + Copy>(
     let f = 0.5 * reduction + 0.5 * (100.0 * total_correct as f32 / total_attempts);
 
     println!(
-        "\t\tTasa Reducción: {} \n\t\tPorcentaje acertados: {}\n\t\tFunción de evaluación: {}",
+        "\t\tReduction rate: {} \n\t\tSuccess percentage: {}/{} = {}\n\t\tEvaluation function: {}",
         reduction,
+        total_correct,
+        total_attempts,
         100.0 * total_correct as f32 / total_attempts,
         f
     );
@@ -223,7 +225,7 @@ pub fn _1_nn_loop<T: Data<T> + Clone + Copy>(
         _correct += _1nn_test(&knowledge, &data[i]);
     }
     println!(
-        "\t\tResultados finales: {}/{} = {}",
+        "\t\tFinal results: {}/{} = {}",
         _correct,
         550,
         _correct as f32 / _total
@@ -238,7 +240,7 @@ fn run<T: Data<T> + Clone + Copy>(
     _folds: usize,
 ) -> Result<(), Box<std::error::Error>> {
     //NOTE Read CSV
-    let mut csv_reader = csv::Reader::from_path(_path).expect("Error leyendo el csv");
+    let mut csv_reader = csv::Reader::from_path(_path).expect("Error reading csv file");
     let mut data: Vec<T> = Vec::new();
 
     let mut id = 0;
@@ -268,49 +270,40 @@ fn run<T: Data<T> + Clone + Copy>(
 
     //NOTE 1-NN
     let mut now = Instant::now();
-    println!("\tResultados 1-NN:");
+    println!("\tResuls for 1-NN:");
     _1_nn_loop(&data, _n_attrs, _folds, size)?;
-    println!(
-        "\t Tiempo transcurrido: {} milisegundos.\n",
-        now.elapsed().as_millis()
-    );
+    println!("\t Time elapsed: {} ms.\n", now.elapsed().as_millis());
     //NOTE Relief descartando
     now = Instant::now();
-    println!("\tResultados Relief descartando pesos < 0.2:");
+    println!("\tResults for Relief discarding weights under 0.2:");
     relief(&data, _folds, _n_attrs, size, true)?;
-    println!(
-        "\t Tiempo transcurrido: {} milisegundos.\n",
-        now.elapsed().as_millis()
-    );
+    println!("\t Time Elapsed: {} ms.\n", now.elapsed().as_millis());
 
     //NOTE Relief sin descartar
     now = Instant::now();
-    println!("\tResultados Relief sin descartar pesos < 0.2:");
+    println!("\tResults for Relief without discarding weights under 0.2:");
     relief(&data, _folds, _n_attrs, size, false)?;
-    println!(
-        "\t Tiempo transcurrido: {} milisegundos.\n",
-        now.elapsed().as_millis()
-    );
+    println!("\t Time elapsed: {} ms.\n", now.elapsed().as_millis());
 
     Ok(())
 }
 
 fn main() {
-    println!("Resultados para Texture.");
-    if let Err(err) = run::<Texture>(String::from("data/texture_normalizados.csv"), 40, 5) {
-        println!("error running Texture: {}", err);
+    println!("Results for Texture.");
+    if let Err(err) = run::<Texture>(String::from("data/texture.csv"), 40, 5) {
+        println!("Error running Texture: {}", err);
         std::process::exit(1);
     }
 
-    println!("Resultados para Colposcopy.");
-    if let Err(err) = run::<Colposcopy>(String::from("data/colposcopy_normalizados.csv"), 62, 5) {
-        println!("error running Texture: {}", err);
+    println!("Results for Colposcopy.");
+    if let Err(err) = run::<Colposcopy>(String::from("data/colposcopy.csv"), 62, 5) {
+        println!("Error running Texture: {}", err);
         std::process::exit(1);
     }
 
-    println!("Resultados para Ionosphere.");
-    if let Err(err) = run::<Ionosphere>(String::from("data/ionosphere_normalizados.csv"), 34, 5) {
-        println!("error running Texture: {}", err);
+    println!("Results for Ionosphere.");
+    if let Err(err) = run::<Ionosphere>(String::from("data/ionosphere.csv"), 34, 5) {
+        println!("Error running Texture: {}", err);
         std::process::exit(1);
     }
 }
