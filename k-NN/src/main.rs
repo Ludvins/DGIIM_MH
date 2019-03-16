@@ -248,19 +248,20 @@ fn run<T: Data<T> + Clone + Copy>(
 }
 
 fn main() {
-    println!("Results for Texture.");
+    println!("# Current Results.");
+    println!("## Results for Texture.\n");
     if let Err(err) = run::<Texture>(String::from("data/texture.csv"), 40, 5) {
         println!("Error running Texture: {}", err);
         std::process::exit(1);
     }
 
-    println!("Results for Colposcopy.");
+    println!("## Results for Colposcopy.\n");
     if let Err(err) = run::<Colposcopy>(String::from("data/colposcopy.csv"), 62, 5) {
         println!("Error running Texture: {}", err);
         std::process::exit(1);
     }
 
-    println!("Results for Ionosphere.");
+    println!("## Results for Ionosphere.\n");
     if let Err(err) = run::<Ionosphere>(String::from("data/ionosphere.csv"), 34, 5) {
         println!("Error running Texture: {}", err);
         std::process::exit(1);
