@@ -10,7 +10,17 @@ use std::collections::HashMap;
 use std::time::Instant;
 use structs::*;
 
-fn make_partitions<T: Data<T> + Clone + Copy>(data: &Vec<T>, folds: usize) -> Vec<Vec<T>> {
+/// Makes partitions keeping the class diversity.
+///
+/// # Arguments
+///
+/// * `data` - Vec with all the data.
+/// * `folds` - Number of partitions
+///
+/// #Returns
+/// Returns a vector with `folds`  vectos of `T`.
+
+pub fn make_partitions<T: Data<T> + Clone + Copy>(data: &Vec<T>, folds: usize) -> Vec<Vec<T>> {
     let mut categories_count = HashMap::new();
     let mut partitions: Vec<Vec<T>> = Vec::new();
 
@@ -28,6 +38,18 @@ fn make_partitions<T: Data<T> + Clone + Copy>(data: &Vec<T>, folds: usize) -> Ve
     return partitions;
 }
 
+/// Clasifies all items in `exam`, using the ones in `knowledge` and weights for each attribute.
+///
+/// # Arguments
+/// * `knowledge` - Items whose class is known.
+/// * `exam` - Items whose class is unknown.
+/// * `weights` - Vector of weights for each attribute.
+/// * `discarding_low_weights` - Boolean value, if true all weights under 0.2 are used as 0.0.
+///
+/// # Returns
+///
+/// Returns a `i32` with the number of correct items classified.
+
 pub fn classifier_1nn_weights<T: Data<T> + Clone + Copy>(
     knowledge: &Vec<T>,
     exam: &Vec<T>,
@@ -35,7 +57,7 @@ pub fn classifier_1nn_weights<T: Data<T> + Clone + Copy>(
     discard_low_weights: bool,
 ) -> i32 {
     let mut correct = 0;
-    for result in exam.iter() {
+    for test in exam.iter() {
         let mut nearest_example: T = T::new();
         let mut min_distance: f32 = std::f32::MAX;
 
@@ -46,8 +68,8 @@ pub fn classifier_1nn_weights<T: Data<T> + Clone + Copy>(
                 // NOTE weights below 0.2 aren't considered.
                 if !discard_low_weights || weights[index] >= 0.2 {
                     distance += weights[index]
-                        * (result.get_attr(index) - known.get_attr(index))
-                        * (result.get_attr(index) - known.get_attr(index))
+                        * (test.get_attr(index) - known.get_attr(index))
+                        * (test.get_attr(index) - known.get_attr(index))
                 }
             }
 
@@ -59,28 +81,39 @@ pub fn classifier_1nn_weights<T: Data<T> + Clone + Copy>(
             }
         }
 
-        if nearest_example.get_class() == result.get_class() {
+        if nearest_example.get_class() == test.get_class() {
             correct += 1;
         }
     }
     return correct;
 }
+/// Clasifies all items in `exam`, using the ones in `knowledge`.
+///
+/// # Arguments
+/// * `knowledge` - Items whose class is known.
+/// * `exam` - Items whose class is unknown.
+///
+/// # Returns
+///
+/// Returns a `i32` with the number of correct items classified.
+///
+/// *Note*: This classifier uses no weights, all attributes have the same value.
 
 pub fn classifier_1nn<T: Data<T> + Clone + Copy>(knowledge: &Vec<T>, exam: &Vec<T>) -> () {
     let mut _correct: i32 = 0;
-    for item in exam.iter() {
+    for test in exam.iter() {
         let mut nearest_example: T = T::new();
         let mut min_distance: f32 = std::f32::MAX;
 
         for known in knowledge.iter() {
-            let distance = item.euclidean_distance(known);
+            let distance = test.euclidean_distance(known);
             if distance < min_distance {
                 min_distance = distance;
                 nearest_example = known.clone();
             }
         }
 
-        if nearest_example.get_class() == item.get_class() {
+        if nearest_example.get_class() == test.get_class() {
             _correct += 1;
         }
     }
@@ -92,7 +125,15 @@ pub fn classifier_1nn<T: Data<T> + Clone + Copy>(knowledge: &Vec<T>, exam: &Vec<
         _correct as f32 / exam.len() as f32
     );
 }
-
+/// Prepares weights using a Greedy algorithm, so they are used in `classifier_1nn_weights`.
+///
+/// # Arguments
+/// * `knowledge` - Items whose class is known.
+/// * `exam` - Items whose class is unknown.
+/// * `n_attrs` - Number of attributes of the data.
+/// * `discarding_low_weights` - Boolean value, if true all weights under 0.2 are used as 0.0.
+///
+/// *Note*: Doesn't return anything just print the result of each test.
 pub fn relief<T: Data<T> + Clone + Copy>(
     knowledge: &Vec<T>,
     exam: &Vec<T>,
@@ -187,14 +228,22 @@ pub fn relief<T: Data<T> + Clone + Copy>(
 
     Ok(())
 }
+///  Using the csv in `path`, prepares everything to call the different classifiers.
+///
+/// # Arguments
+/// * `path` - CSV file path.
+/// * `n_attrs` - Number of attributes of the data.
+/// * `folds` - Number of partitions to make (calls `make_partitions`).
+///
+/// *Note*: Doesn't return anything just print the result of each test.
 
-fn run<T: Data<T> + Clone + Copy>(
-    _path: String,
-    _n_attrs: usize,
-    _folds: usize,
+pub fn run<T: Data<T> + Clone + Copy>(
+    path: String,
+    n_attrs: usize,
+    folds: usize,
 ) -> Result<(), Box<std::error::Error>> {
     //NOTE Read CSV
-    let mut csv_reader = csv::Reader::from_path(_path).expect("Error reading csv file");
+    let mut csv_reader = csv::Reader::from_path(path).expect("Error reading csv file");
     let mut data: Vec<T> = Vec::new();
 
     let mut id = 0;
@@ -205,7 +254,7 @@ fn run<T: Data<T> + Clone + Copy>(
         let mut counter = 0;
         for field in record.iter() {
             // NOTE CSV structure: id , ... attributes ... , class
-            if counter != _n_attrs {
+            if counter != n_attrs {
                 aux_record.set_attr(counter, field.parse::<f32>().unwrap());
             } else {
                 aux_record.set_class(field.parse::<i32>().unwrap());
@@ -221,9 +270,9 @@ fn run<T: Data<T> + Clone + Copy>(
 
     let data: Vec<Vec<T>> = make_partitions(&data, 5);
 
-    for i in 0.._folds {
+    for i in 0..folds {
         let mut knowledge: Vec<T> = Vec::new();
-        for j in 0.._folds {
+        for j in 0..folds {
             if j != i {
                 knowledge.extend(&data[j]);
             }
@@ -236,11 +285,11 @@ fn run<T: Data<T> + Clone + Copy>(
         println!("\t\t Time elapsed: {} ms.\n", now.elapsed().as_millis());
 
         now = Instant::now();
-        relief(&knowledge, &exam, _n_attrs, true)?;
+        relief(&knowledge, &exam, n_attrs, true)?;
         println!("\t\t Time Elapsed: {} ms.\n", now.elapsed().as_millis());
 
         now = Instant::now();
-        relief(&knowledge, &exam, _n_attrs, false)?;
+        relief(&knowledge, &exam, n_attrs, false)?;
         println!("\t\t Time elapsed: {} ms.\n", now.elapsed().as_millis());
     }
 
