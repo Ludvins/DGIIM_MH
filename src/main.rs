@@ -4,7 +4,7 @@ extern crate serde_derive;
 //use std::sync::{Arc, Mutex}; //TODO Concurrency
 //use std::thread;
 
-mod structs;
+pub mod structs;
 
 use std::collections::HashMap;
 use std::time::Instant;
@@ -17,7 +17,7 @@ use structs::*;
 /// * `data` - Vec with all the data.
 /// * `folds` - Number of partitions
 ///
-/// #Returns
+/// # Returns
 /// Returns a vector with `folds`  vectos of `T`.
 
 pub fn make_partitions<T: Data<T> + Clone + Copy>(data: &Vec<T>, folds: usize) -> Vec<Vec<T>> {
@@ -97,7 +97,7 @@ pub fn classifier_1nn_weights<T: Data<T> + Clone + Copy>(
 ///
 /// Returns a `i32` with the number of correct items classified.
 ///
-/// *Note*: This classifier uses no weights, all attributes have the same value.
+/// **Note**: This classifier uses no weights, all attributes have the same value.
 
 pub fn classifier_1nn<T: Data<T> + Clone + Copy>(knowledge: &Vec<T>, exam: &Vec<T>) -> () {
     let mut _correct: i32 = 0;
@@ -133,7 +133,7 @@ pub fn classifier_1nn<T: Data<T> + Clone + Copy>(knowledge: &Vec<T>, exam: &Vec<
 /// * `n_attrs` - Number of attributes of the data.
 /// * `discarding_low_weights` - Boolean value, if true all weights under 0.2 are used as 0.0.
 ///
-/// *Note*: Doesn't return anything just print the result of each test.
+/// **Note**: Doesn't return anything just print the result of each test.
 pub fn relief<T: Data<T> + Clone + Copy>(
     knowledge: &Vec<T>,
     exam: &Vec<T>,
@@ -235,7 +235,7 @@ pub fn relief<T: Data<T> + Clone + Copy>(
 /// * `n_attrs` - Number of attributes of the data.
 /// * `folds` - Number of partitions to make (calls `make_partitions`).
 ///
-/// *Note*: Doesn't return anything just print the result of each test.
+/// **Note**: Doesn't return anything just print the result of each test.
 
 pub fn run<T: Data<T> + Clone + Copy>(
     path: String,

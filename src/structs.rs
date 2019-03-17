@@ -1,8 +1,11 @@
+/// Trait for CSV data
+///
+/// **Note**: The struct implementing this trait must also implement `Copy` and `Clone`.
 pub trait Data<T> {
     fn new() -> T;
-    fn get_class(&self) -> i32;
     fn get_id(&self) -> i32;
     fn get_attr(&self, index: usize) -> f32;
+    fn get_class(&self) -> i32;
     fn set_id(&mut self, index: i32) -> ();
     fn set_attr(&mut self, index: usize, value: f32) -> ();
     fn set_class(&mut self, value: i32) -> ();
@@ -17,8 +20,12 @@ pub struct Texture {
 }
 
 impl Data<Texture> for Texture {
-    fn get_class(&self) -> i32 {
-        return self._class;
+    fn new() -> Texture {
+        Texture {
+            _id: -1,
+            _attrs: [0.0; 40],
+            _class: -1,
+        }
     }
     fn get_id(&self) -> i32 {
         return self._id;
@@ -26,9 +33,8 @@ impl Data<Texture> for Texture {
     fn get_attr(&self, index: usize) -> f32 {
         return self._attrs[index];
     }
-
-    fn set_class(&mut self, value: i32) -> () {
-        self._class = value;
+    fn get_class(&self) -> i32 {
+        return self._class;
     }
     fn set_id(&mut self, value: i32) -> () {
         self._id = value;
@@ -36,13 +42,8 @@ impl Data<Texture> for Texture {
     fn set_attr(&mut self, index: usize, value: f32) -> () {
         self._attrs[index] = value;;
     }
-
-    fn new() -> Texture {
-        Texture {
-            _id: -1,
-            _attrs: [0.0; 40],
-            _class: -1,
-        }
+    fn set_class(&mut self, value: i32) -> () {
+        self._class = value;
     }
     fn euclidean_distance(&self, other: &Texture) -> f32 {
         let mut sum = 0.0;
@@ -62,8 +63,12 @@ pub struct Colposcopy {
 }
 
 impl Data<Colposcopy> for Colposcopy {
-    fn get_class(&self) -> i32 {
-        return self._class;
+    fn new() -> Colposcopy {
+        Colposcopy {
+            _id: -1,
+            _attrs: [0.0; 62],
+            _class: -1,
+        }
     }
     fn get_id(&self) -> i32 {
         return self._id;
@@ -71,9 +76,8 @@ impl Data<Colposcopy> for Colposcopy {
     fn get_attr(&self, index: usize) -> f32 {
         return self._attrs[index];
     }
-
-    fn set_class(&mut self, value: i32) -> () {
-        self._class = value;
+    fn get_class(&self) -> i32 {
+        return self._class;
     }
     fn set_id(&mut self, value: i32) -> () {
         self._id = value;
@@ -81,13 +85,8 @@ impl Data<Colposcopy> for Colposcopy {
     fn set_attr(&mut self, index: usize, value: f32) -> () {
         self._attrs[index] = value;;
     }
-
-    fn new() -> Colposcopy {
-        Colposcopy {
-            _id: -1,
-            _attrs: [0.0; 62],
-            _class: -1,
-        }
+    fn set_class(&mut self, value: i32) -> () {
+        self._class = value;
     }
     fn euclidean_distance(&self, other: &Colposcopy) -> f32 {
         let mut sum = 0.0;
@@ -107,8 +106,12 @@ pub struct Ionosphere {
 }
 
 impl Data<Ionosphere> for Ionosphere {
-    fn get_class(&self) -> i32 {
-        return self._class;
+    fn new() -> Ionosphere {
+        Ionosphere {
+            _id: -1,
+            _attrs: [0.0; 34],
+            _class: -1,
+        }
     }
     fn get_id(&self) -> i32 {
         return self._id;
@@ -116,9 +119,8 @@ impl Data<Ionosphere> for Ionosphere {
     fn get_attr(&self, index: usize) -> f32 {
         return self._attrs[index];
     }
-
-    fn set_class(&mut self, value: i32) -> () {
-        self._class = value;
+    fn get_class(&self) -> i32 {
+        return self._class;
     }
     fn set_id(&mut self, value: i32) -> () {
         self._id = value;
@@ -126,13 +128,8 @@ impl Data<Ionosphere> for Ionosphere {
     fn set_attr(&mut self, index: usize, value: f32) -> () {
         self._attrs[index] = value;;
     }
-
-    fn new() -> Ionosphere {
-        Ionosphere {
-            _id: -1,
-            _attrs: [0.0; 34],
-            _class: -1,
-        }
+    fn set_class(&mut self, value: i32) -> () {
+        self._class = value;
     }
     fn euclidean_distance(&self, other: &Ionosphere) -> f32 {
         let mut sum = 0.0;
