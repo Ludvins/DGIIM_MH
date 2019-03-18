@@ -386,15 +386,15 @@ fn main() {
         std::process::exit(1);
     }
 
-    // println!("## Results for Colposcopy.\n");
-    // if let Err(err) = run::<Colposcopy>(String::from("data/colposcopy.csv"), 62, 5) {
-    //     println!("Error running Texture: {}", err);
-    //     std::process::exit(1);
-    // }
+    println!("## Results for Colposcopy.\n");
+    if let Err(err) = run::<Colposcopy>(String::from("data/colposcopy.csv"), 62, 5) {
+        println!("Error running Texture: {}", err);
+        std::process::exit(1);
+    }
 
-    // println!("## Results for Ionosphere.\n");
-    // if let Err(err) = run::<Ionosphere>(String::from("data/ionosphere.csv"), 34, 5) {
-    //     println!("Error running Texture: {}", err);
-    //     std::process::exit(1);
-    // }
+    println!("## Results for Ionosphere.\n");
+    if let Err(err) = run::<Ionosphere>(String::from("data/ionosphere.csv"), 34, 5) {
+        println!("Error running Texture: {}", err);
+        std::process::exit(1);
+    }
 }
