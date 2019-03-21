@@ -209,6 +209,13 @@ pub fn relief<T: Data<T> + Clone + Copy>(
     return classifier_1nn(&knowledge, &exam, &weights, discard_low_weights);
 }
 
+/// Adds a random value of a normal distribution N(0.0, `desv`), to the vector `weights` at the position `index_to_mutate`
+///
+/// # Arguments
+/// * `weights` - Vector to  be muted.
+/// * `desv` - Typical desviation to be used.
+/// * `index_to_mutate` - Index to mutate in the vector.
+///
 pub fn mutate_weights(weights: &mut Vec<f32>, desv: f64, index_to_mutate: usize) {
     let normal = Normal::new(0.0, desv);
     let mut rng = thread_rng();
