@@ -13,20 +13,16 @@ use std::collections::HashMap;
 use std::time::Instant;
 use structs::*;
 
-fn refresh_index_vec(index_vec: &mut Vec<usize>, size: usize) -> usize {
+fn refresh_index_vec(size: usize) -> Vec<usize> {
     let mut rng = thread_rng();
-    index_vec.clear();
-    for index in 0..size {
-        index_vec.push(index);
-    }
+
+    let mut index_vec: Vec<usize> = (0..size).collect();
     index_vec.shuffle(&mut rng);
 
-    let ret = index_vec[0];
-    index_vec.remove(0);
-    return ret;
+    return index_vec;
 }
 
-fn normalize_and_truncate_weights(weights: &mut Vec<f32>) {
+fn normalize_and_truncate_negative_weights(weights: &mut Vec<f32>) {
     // NOTE Normalize
     let mut highest_weight: f32 = 0.0;
     for attr in 0..weights.len() {
@@ -72,41 +68,6 @@ pub fn make_partitions<T: Data<T> + Clone + Copy>(data: &Vec<T>, folds: usize) -
 
     return partitions;
 }
-/// Clasifies all items in `exam`, using the ones in `knowledge`.
-///
-/// # Arguments
-/// * `knowledge` - Items whose class is known.
-/// * `exam` - Items whose class is unknown.
-///
-/// # Returns
-///
-/// Returns an instance of Results.
-///
-/// **Note**: This classifier uses no weights, all attributes have the same value.
-pub fn classifier_1nn<T: Data<T> + Clone + Copy>(knowledge: &Vec<T>, exam: &Vec<T>) -> Results {
-    let mut correct: u32 = 0;
-    // NOTE Make the test over each element in exam.
-    for test in exam.iter() {
-        let mut nearest_example: T = T::new();
-        let mut min_distance: f32 = std::f32::MAX;
-
-        for known in knowledge.iter() {
-            let distance = test.euclidean_distance(known);
-            if distance < min_distance {
-                min_distance = distance;
-                nearest_example = known.clone();
-            }
-        }
-
-        // NOTE Verify if test was clasified correctly.
-        if nearest_example.get_class() == test.get_class() {
-            correct += 1;
-        }
-    }
-
-    let results = Results::new(0, correct, exam.len(), 0);
-    return results;
-}
 
 /// Clasifies all items in `exam`, using the ones in `knowledge` and weights for each attribute.
 ///
@@ -119,7 +80,7 @@ pub fn classifier_1nn<T: Data<T> + Clone + Copy>(knowledge: &Vec<T>, exam: &Vec<
 /// # Returns
 ///
 /// Returns an instance of Results.
-pub fn classifier_1nn_weights<T: Data<T> + Clone + Copy>(
+pub fn classifier_1nn<T: Data<T> + Clone + Copy>(
     knowledge: &Vec<T>,
     exam: &Vec<T>,
     weights: &Vec<f32>,
@@ -222,7 +183,7 @@ pub fn calculate_greedy_weights<T: Data<T> + Clone + Copy>(
         }
     }
     // NOTE END Greedy
-    normalize_and_truncate_weights(&mut weights);
+    normalize_and_truncate_negative_weights(&mut weights);
 
     return weights;
 }
@@ -243,42 +204,45 @@ pub fn relief<T: Data<T> + Clone + Copy>(
     discard_low_weights: bool,
 ) -> Results {
     // NOTE Initialize vector of weights.
-    let mut weights = calculate_greedy_weights(knowledge, n_attrs);
+    let weights = calculate_greedy_weights(knowledge, n_attrs);
 
-    normalize_and_truncate_weights(&mut weights);
-    return classifier_1nn_weights(&knowledge, &exam, &weights, discard_low_weights);
+    return classifier_1nn(&knowledge, &exam, &weights, discard_low_weights);
 }
 
 pub fn mutate_weights(weights: &mut Vec<f32>, desv: f64, index_to_mutate: usize) {
     let normal = Normal::new(0.0, desv);
     let mut rng = thread_rng();
     weights[index_to_mutate] += normal.sample(&mut rng) as f32;
+    if weights[index_to_mutate] > 1.0 {
+        weights[index_to_mutate] = 1.0;
+    } else {
+        if weights[index_to_mutate] < 0.0 {
+            weights[index_to_mutate] = 0.0;
+        }
+    }
 }
-
-/// Prepares weights using a local search algorithm, so they are used in `classifier_1nn_weights`.
+/// Prepares weights using a local search algorithm.
 ///
 /// # Arguments
 /// * `knowledge` - Items whose class is known.
-/// * `exam` - Items whose class is unknown.
 /// * `n_attrs` - Number of attributes of the data.
 /// * `discarding_low_weights` - Boolean value, if true all weights under 0.2 are used as 0.0.
 /// # Returns
-/// An instance od Results
+/// The vector of weights
 /// **Note**: This generates 15000 neightbours and breaks if 20*`n_attrs` neightbours are generated without any improve.
-pub fn local_search<T: Data<T> + Clone + Copy>(
+pub fn calculate_local_search_weights<T: Data<T> + Clone + Copy>(
     knowledge: &Vec<T>,
-    exam: &Vec<T>,
     n_attrs: usize,
     discard_low_weights: bool,
     use_greedy_initial_weights: bool,
-) -> Results {
+) -> Vec<f32> {
     let uniform = Uniform::new(0.0, 1.0);
     let mut weights: Vec<f32> = vec![0.0; n_attrs];
     let mut rng = thread_rng();
-    let mut muted_counter = 0;
-    // NOTE Initualize weights using greedy
+    let mut _muted_counter = 0;
+    // NOTE Initialize weights using greedy
     if use_greedy_initial_weights {
-        weights = calculate_greedy_weights(knowledge, n_attrs);
+        weights = calculate_greedy_weights(&knowledge, n_attrs);
     } else {
         // NOTE Initialize weights using uniform distribution.
         for attr in 0..n_attrs {
@@ -286,48 +250,71 @@ pub fn local_search<T: Data<T> + Clone + Copy>(
         }
     }
     // NOTE Initialize vector of index
-    let mut index_vec: Vec<usize> = Vec::new();
-    let mut index_to_mute: usize = refresh_index_vec(&mut index_vec, n_attrs);
+    let mut index_vec = refresh_index_vec(n_attrs);
 
-    let mut result = classifier_1nn_weights(knowledge, knowledge, &weights, discard_low_weights);
+    let mut result = classifier_1nn(&knowledge, &knowledge, &weights, discard_low_weights);
 
-    let max_neighbours = 20 * n_attrs;
-    let mut n_neighbours_generated = 0;
+    let max_neighbours_without_muting = 20 * n_attrs;
+    let mut n_neighbours_generated_without_muting = 0;
+    let mut _mutations = 0;
     for _ in 0..15000 {
+        let index_to_mute = index_vec.pop().expect("Index vector empty!.");
         let mut muted_weights = weights.clone();
         mutate_weights(&mut muted_weights, 0.3, index_to_mute);
 
-        normalize_and_truncate_weights(&mut muted_weights);
         let muted_result =
-            classifier_1nn_weights(knowledge, knowledge, &muted_weights, discard_low_weights);
+            classifier_1nn(&knowledge, &knowledge, &muted_weights, discard_low_weights);
 
         //NOTE if muted_weights is better
         if muted_result.evaluation_function() > result.evaluation_function() {
-            muted_counter += 1;
+            _mutations += 1;
             // NOTE Reset neighbours count.
-            n_neighbours_generated = 0;
+            n_neighbours_generated_without_muting = 0;
 
             // NOTE Save new best results.
             weights = muted_weights;
             result = muted_result;
             // NOTE Refresh index vector
-            index_to_mute = refresh_index_vec(&mut index_vec, n_attrs);
+            index_vec = refresh_index_vec(n_attrs);
         } else {
-            n_neighbours_generated += 1;
-            if n_neighbours_generated == max_neighbours {
+            n_neighbours_generated_without_muting += 1;
+            if n_neighbours_generated_without_muting == max_neighbours_without_muting {
                 break;
             }
             //NOTE if no more index to mutate, recharge them.
             if index_vec.is_empty() {
-                index_to_mute = refresh_index_vec(&mut index_vec, n_attrs);
-            } else {
-                index_to_mute = index_vec[0];
+                index_vec = refresh_index_vec(n_attrs);
             }
         }
     }
+    //println!("Mutations: {}", _mutations);
+    return weights;
+}
 
-    let result = classifier_1nn_weights(knowledge, exam, &weights, discard_low_weights);
-    println!("Muted: {}", muted_counter);
+/// Calls `calculate_local_search_weights` and then `classifier_1nn_weights`.
+///
+/// # Arguments
+/// * `knowledge` - Items whose class is known.
+/// * `exam` - Items whose class is unknown.
+/// * `n_attrs` - Number of attributes of the data.
+/// * `discarding_low_weights` - Boolean value, if true all weights under 0.2 are used as 0.0.
+/// # Returns
+/// An instance of Results
+pub fn local_search<T: Data<T> + Clone + Copy>(
+    knowledge: &Vec<T>,
+    exam: &Vec<T>,
+    n_attrs: usize,
+    discard_low_weights: bool,
+    use_greedy_initial_weights: bool,
+) -> Results {
+    let weights: Vec<f32> = calculate_local_search_weights(
+        knowledge,
+        n_attrs,
+        discard_low_weights,
+        use_greedy_initial_weights,
+    );
+
+    let result = classifier_1nn(&knowledge, &exam, &weights, discard_low_weights);
     return result;
 }
 
@@ -381,7 +368,7 @@ pub fn run<T: Data<T> + Clone + Copy>(
         let exam = data[i].clone();
 
         // let mut now = Instant::now();
-        // let nn_result = classifier_1nn(&knowledge, &exam);
+        // let nn_result = classifier_1nn(&knowledge, &exam, &vec![1.0; n_attrs], false);
         // println!("\t\t1-NN results: \n{}", nn_result);
         // println!("\t\t Time elapsed: {} ms.\n", now.elapsed().as_millis());
 
@@ -399,12 +386,12 @@ pub fn run<T: Data<T> + Clone + Copy>(
         // println!("\t\t Time elapsed: {} ms.\n", now.elapsed().as_millis());
 
         let mut now = Instant::now();
-        let ls_result = local_search(&knowledge, &exam, n_attrs, false, false);
+        let ls_result = local_search(&knowledge, &exam, n_attrs, true, false);
         println!("\t\tLocal Search results: \n{}", ls_result);
         println!("\t\t Time elapsed: {} ms.\n", now.elapsed().as_millis());
 
         now = Instant::now();
-        let ls_result2 = local_search(&knowledge, &exam, n_attrs, false, true);
+        let ls_result2 = local_search(&knowledge, &exam, n_attrs, true, true);
         println!(
             "\t\tLocal Search using greedy initial weights results: \n{}",
             ls_result2
