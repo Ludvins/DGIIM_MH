@@ -215,7 +215,6 @@ pub fn relief<T: Data<T> + Clone + Copy>(
 /// * `weights` - Vector to  be muted.
 /// * `desv` - Typical desviation to be used.
 /// * `index_to_mutate` - Index to mutate in the vector.
-///
 pub fn mutate_weights(weights: &mut Vec<f32>, desv: f64, index_to_mutate: usize) {
     let normal = Normal::new(0.0, desv);
     let mut rng = thread_rng();
