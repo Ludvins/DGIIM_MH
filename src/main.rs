@@ -15,10 +15,8 @@ use structs::*;
 
 fn refresh_index_vec(size: usize) -> Vec<usize> {
     let mut rng = thread_rng();
-
     let mut index_vec: Vec<usize> = (0..size).collect();
     index_vec.shuffle(&mut rng);
-
     return index_vec;
 }
 
@@ -138,6 +136,8 @@ pub fn classifier_1nn<T: Data<T> + Clone + Copy>(
 ///
 /// # Return
 /// Returns the vector of weights
+///
+/// **Note:** If no ally or enemy is found, this algorithm doesn't work, as it isn't contemplated. I'm not fixing this becasuse it can't happen in our project.
 pub fn calculate_greedy_weights<T: Data<T> + Clone + Copy>(
     knowledge: &Vec<T>,
     n_attrs: usize,
