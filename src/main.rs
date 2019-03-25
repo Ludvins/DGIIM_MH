@@ -13,6 +13,7 @@ use std::collections::HashMap;
 use std::time::Instant;
 use structs::*;
 
+// Returns a shuffled vector of indexes form 0 to `usize`
 fn refresh_index_vec(size: usize) -> Vec<usize> {
     let mut rng = thread_rng();
     let mut index_vec: Vec<usize> = (0..size).collect();
@@ -20,6 +21,7 @@ fn refresh_index_vec(size: usize) -> Vec<usize> {
     return index_vec;
 }
 
+// Normalizes the given vector and sets negatives values to 0.
 fn normalize_and_truncate_negative_weights(weights: &mut Vec<f32>) {
     // NOTE Normalize
     let mut highest_weight: f32 = 0.0;
@@ -56,7 +58,6 @@ pub fn make_partitions<T: Data<T> + Clone + Copy>(data: &Vec<T>, folds: usize) -
     for _ in 0..folds {
         partitions.push(Vec::new());
     }
-
     for example in data {
         let counter = categories_count.entry(example.get_class()).or_insert(0);
         partitions[*counter].push(example.clone());
@@ -235,7 +236,7 @@ pub fn mutate_weights(weights: &mut Vec<f32>, desv: f64, index_to_mutate: usize)
 /// * `discarding_low_weights` - Boolean value, if true all weights under 0.2 are used as 0.0.
 /// # Returns
 /// The vector of weights
-/// **Note**: This generates 15000 neightbours and breaks if 20*`n_attrs` neightbours are generated without any improve.
+/// **Note**: This generates 15000 neightbours and ends if 20*`n_attrs` neightbours are generated without any improve.
 pub fn calculate_local_search_weights<T: Data<T> + Clone + Copy>(
     knowledge: &Vec<T>,
     n_attrs: usize,
