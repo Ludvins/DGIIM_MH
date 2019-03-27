@@ -163,7 +163,6 @@ pub fn calculate_greedy_weights<T: Data<T> + Clone + Copy>(
         }
         let enemy: T = knowledge[enemy_index].clone();
         let ally: T = knowledge[ally_index].clone();
-
         // NOTE Re-calculate weights
         for attr in 0..n_attrs {
             weights[attr] += (known.get_attr(attr) - enemy.get_attr(attr)).abs()
@@ -366,6 +365,12 @@ pub fn run<T: Data<T> + Clone + Copy>(
     let mut table_ls1 = table_1nn.clone();
     let mut table_ls2 = table_1nn.clone();
 
+    let do_1nn = false;
+    let do_relief1 = true;
+    let do_relief2 = false;
+    let do_ls1 = false;
+    let do_ls2 = false;
+
     for i in 0..folds {
         let mut knowledge: Vec<T> = Vec::new();
         for j in 0..folds {
@@ -375,87 +380,116 @@ pub fn run<T: Data<T> + Clone + Copy>(
         }
         let exam = data[i].clone();
 
-        let mut now = Instant::now();
-        let nn_result = classifier_1nn(&knowledge, &exam, &vec![1.0; n_attrs], false);
-        table_1nn.add_row(row![
-            i,
-            nn_result.success_percentage(),
-            nn_result.reduction_rate(),
-            nn_result.evaluation_function(),
-            now.elapsed().as_millis()
-        ]);
+        if do_1nn {
+            let now = Instant::now();
+            let nn_result = classifier_1nn(&knowledge, &exam, &vec![1.0; n_attrs], false);
+            table_1nn.add_row(row![
+                i,
+                nn_result.success_percentage(),
+                nn_result.reduction_rate(),
+                nn_result.evaluation_function(),
+                now.elapsed().as_millis()
+            ]);
+        }
+        if do_relief1 {
+            let now = Instant::now();
+            let relief_result = relief(&knowledge, &exam, n_attrs, true);
+            table_relief1.add_row(row![
+                i,
+                relief_result.success_percentage(),
+                relief_result.reduction_rate(),
+                relief_result.evaluation_function(),
+                now.elapsed().as_millis()
+            ]);
+        }
 
-        now = Instant::now();
-        let relief_result = relief(&knowledge, &exam, n_attrs, true);
-        table_relief1.add_row(row![
-            i,
-            relief_result.success_percentage(),
-            relief_result.reduction_rate(),
-            relief_result.evaluation_function(),
-            now.elapsed().as_millis()
-        ]);
+        if do_relief2 {
+            let now = Instant::now();
+            let relief_result2 = relief(&knowledge, &exam, n_attrs, false);
+            table_relief2.add_row(row![
+                i,
+                relief_result2.success_percentage(),
+                relief_result2.reduction_rate(),
+                relief_result2.evaluation_function(),
+                now.elapsed().as_millis()
+            ]);
+        }
 
-        now = Instant::now();
-        let relief_result2 = relief(&knowledge, &exam, n_attrs, false);
-        table_relief2.add_row(row![
-            i,
-            relief_result2.success_percentage(),
-            relief_result2.reduction_rate(),
-            relief_result2.evaluation_function(),
-            now.elapsed().as_millis()
-        ]);
+        if do_ls1 {
+            let now = Instant::now();
+            let ls_result = local_search(&knowledge, &exam, n_attrs, true, false);
+            table_ls1.add_row(row![
+                i,
+                ls_result.success_percentage(),
+                ls_result.reduction_rate(),
+                ls_result.evaluation_function(),
+                now.elapsed().as_millis()
+            ]);
+        }
 
-        now = Instant::now();
-        let ls_result = local_search(&knowledge, &exam, n_attrs, true, false);
-        table_ls1.add_row(row![
-            i,
-            ls_result.success_percentage(),
-            ls_result.reduction_rate(),
-            ls_result.evaluation_function(),
-            now.elapsed().as_millis()
-        ]);
+        if do_ls2 {
+            let now = Instant::now();
+            let ls_result2 = local_search(&knowledge, &exam, n_attrs, true, true);
 
-        now = Instant::now();
-        let ls_result2 = local_search(&knowledge, &exam, n_attrs, true, true);
-
-        table_ls2.add_row(row![
-            i,
-            ls_result2.success_percentage(),
-            ls_result2.reduction_rate(),
-            ls_result2.evaluation_function(),
-            now.elapsed().as_millis()
-        ]);
+            table_ls2.add_row(row![
+                i,
+                ls_result2.success_percentage(),
+                ls_result2.reduction_rate(),
+                ls_result2.evaluation_function(),
+                now.elapsed().as_millis()
+            ]);
+        }
     }
-    println!("1-NN");
-    table_1nn.printstd();
-    println!("Relief 1");
-    table_relief1.printstd();
-    println!("Relief 2");
-    table_relief2.printstd();
-    println!("Local Search 1");
-    table_ls1.printstd();
-    println!("Local Search 2");
-    table_ls2.printstd();
+    if do_1nn {
+        println!("1-NN");
+        table_1nn.printstd();
+    }
+    if do_relief1 {
+        println!("Relief 1");
+        table_relief1.printstd();
+    }
+    if do_relief2 {
+        println!("Relief 2");
+        table_relief2.printstd();
+    }
+    if do_ls1 {
+        println!("Local Search 1");
+        table_ls1.printstd();
+    }
+    if do_ls2 {
+        println!("Local Search 2");
+        table_ls2.printstd();
+    }
     Ok(())
 }
 
 fn main() {
+    let do_texture = true;
+    let do_colpos = true;
+    let do_iono = true;
+
     println!("# Current Results.");
-    println!("## Results for Texture.\n");
-    if let Err(err) = run::<Texture>(String::from("data/texture.csv"), 40, 5) {
-        println!("Error running Texture: {}", err);
-        std::process::exit(1);
+    if do_texture {
+        println!("## Results for Texture.\n");
+        if let Err(err) = run::<Texture>(String::from("data/texture.csv"), 40, 5) {
+            println!("Error running Texture: {}", err);
+            std::process::exit(1);
+        }
     }
 
-    println!("## Results for Colposcopy.\n");
-    if let Err(err) = run::<Colposcopy>(String::from("data/colposcopy.csv"), 62, 5) {
-        println!("Error running Colposcopy: {}", err);
-        std::process::exit(1);
+    if do_colpos {
+        println!("## Results for Colposcopy.\n");
+        if let Err(err) = run::<Colposcopy>(String::from("data/colposcopy.csv"), 62, 5) {
+            println!("Error running Colposcopy: {}", err);
+            std::process::exit(1);
+        }
     }
 
-    println!("## Results for Ionosphere.\n");
-    if let Err(err) = run::<Ionosphere>(String::from("data/ionosphere.csv"), 34, 5) {
-        println!("Error running Ionosphere: {}", err);
-        std::process::exit(1);
+    if do_iono {
+        println!("## Results for Ionosphere.\n");
+        if let Err(err) = run::<Ionosphere>(String::from("data/ionosphere.csv"), 34, 5) {
+            println!("Error running Ionosphere: {}", err);
+            std::process::exit(1);
+        }
     }
 }
