@@ -2,7 +2,7 @@ use std::fmt;
 /// Trait for CSV data
 ///
 /// **Note**: The struct implementing this trait must also implement `Copy` and `Clone`.
-pub trait Data<T> {
+pub trait Data<T: Copy + Clone> {
     fn new() -> T;
     fn get_id(&self) -> i32;
     fn get_attr(&self, index: usize) -> f32;
@@ -21,17 +21,19 @@ pub struct Results {
 }
 
 impl Results {
-    pub fn new(
-        _low_weights: u32,
-        _correct_answers: u32,
-        _exam_len: usize,
-        _n_attrs: usize,
-    ) -> Results {
+    pub fn new(weights: &Vec<f32>, correct_answers: u32, exam_len: usize) -> Results {
+        let mut low = 0;
+        for attr in 0..weights.len() {
+            if weights[attr] < 0.2 {
+                low += 1;
+            }
+        }
+
         Results {
-            low_weights: _low_weights as f32,
-            correct_answers: _correct_answers as f32,
-            exam_len: _exam_len as f32,
-            n_attrs: _n_attrs as f32,
+            low_weights: low as f32,
+            correct_answers: correct_answers as f32,
+            exam_len: exam_len as f32,
+            n_attrs: weights.len() as f32,
         }
     }
     pub fn reduction_rate(&self) -> f32 {

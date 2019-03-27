@@ -6,20 +6,15 @@ extern crate serde_derive;
 //use std::thread;
 
 pub mod structs;
+use prettytable::Table;
 use rand::distributions::{Distribution, Normal, Uniform};
 use rand::seq::SliceRandom;
 use rand::thread_rng;
 use std::collections::HashMap;
 use std::time::Instant;
 use structs::*;
-
-// Returns a shuffled vector of indexes form 0 to `usize`
-fn refresh_index_vec(size: usize) -> Vec<usize> {
-    let mut rng = thread_rng();
-    let mut index_vec: Vec<usize> = (0..size).collect();
-    index_vec.shuffle(&mut rng);
-    return index_vec;
-}
+#[macro_use]
+extern crate prettytable;
 
 // Normalizes the given vector and sets negatives values to 0.
 fn normalize_and_truncate_negative_weights(weights: &mut Vec<f32>) {
@@ -118,15 +113,7 @@ pub fn classifier_1nn<T: Data<T> + Clone + Copy>(
             correct += 1;
         }
     }
-    let mut low = 0;
-    for attr in 0..weights.len() {
-        if weights[attr] < 0.2 {
-            low += 1;
-        }
-    }
-
-    let results = Results::new(low, correct, exam.len(), weights.len());
-    return results;
+    return Results::new(weights, correct, exam.len());
 }
 
 /// Prepares weights using a Greedy algorithm.
@@ -238,28 +225,28 @@ pub fn mutate_weights(weights: &mut Vec<f32>, desv: f64, index_to_mutate: usize)
 /// The vector of weights
 /// **Note**: This generates 15000 neightbours and ends if 20*`n_attrs` neightbours are generated without any improve.
 pub fn calculate_local_search_weights<T: Data<T> + Clone + Copy>(
-    knowledge: &Vec<T>,
+    training: &Vec<T>,
     n_attrs: usize,
     discard_low_weights: bool,
     use_greedy_initial_weights: bool,
 ) -> Vec<f32> {
-    let uniform = Uniform::new(0.0, 1.0);
     let mut weights: Vec<f32> = vec![0.0; n_attrs];
+
     let mut rng = thread_rng();
-    let mut _muted_counter = 0;
-    // NOTE Initialize weights using greedy
+    // NOTE Initialize weights using greedy or uniform
     if use_greedy_initial_weights {
-        weights = calculate_greedy_weights(&knowledge, n_attrs);
+        weights = calculate_greedy_weights(&training, n_attrs);
     } else {
-        // NOTE Initialize weights using uniform distribution.
+        let uniform = Uniform::new(0.0, 1.0);
         for attr in 0..n_attrs {
             weights[attr] += uniform.sample(&mut rng);
         }
     }
     // NOTE Initialize vector of index
-    let mut index_vec = refresh_index_vec(n_attrs);
+    let mut index_vec: Vec<usize> = (0..n_attrs).collect();
+    index_vec.shuffle(&mut rng);
 
-    let mut result = classifier_1nn(&knowledge, &knowledge, &weights, discard_low_weights);
+    let mut best_result = classifier_1nn(&training, &training, &weights, discard_low_weights);
 
     let max_neighbours_without_muting = 20 * n_attrs;
     let mut n_neighbours_generated_without_muting = 0;
@@ -270,19 +257,20 @@ pub fn calculate_local_search_weights<T: Data<T> + Clone + Copy>(
         mutate_weights(&mut muted_weights, 0.3, index_to_mute);
 
         let muted_result =
-            classifier_1nn(&knowledge, &knowledge, &muted_weights, discard_low_weights);
+            classifier_1nn(&training, &training, &muted_weights, discard_low_weights);
 
         //NOTE if muted_weights is better
-        if muted_result.evaluation_function() > result.evaluation_function() {
+        if muted_result.evaluation_function() > best_result.evaluation_function() {
             _mutations += 1;
             // NOTE Reset neighbours count.
             n_neighbours_generated_without_muting = 0;
 
             // NOTE Save new best results.
             weights = muted_weights;
-            result = muted_result;
+            best_result = muted_result;
             // NOTE Refresh index vector
-            index_vec = refresh_index_vec(n_attrs);
+            index_vec = (0..n_attrs).collect();
+            index_vec.shuffle(&mut rng);
         } else {
             n_neighbours_generated_without_muting += 1;
             if n_neighbours_generated_without_muting == max_neighbours_without_muting {
@@ -290,7 +278,8 @@ pub fn calculate_local_search_weights<T: Data<T> + Clone + Copy>(
             }
             //NOTE if no more index to mutate, recharge them.
             if index_vec.is_empty() {
-                index_vec = refresh_index_vec(n_attrs);
+                index_vec = (0..n_attrs).collect();
+                index_vec.shuffle(&mut rng);
             }
         }
     }
@@ -364,6 +353,19 @@ pub fn run<T: Data<T> + Clone + Copy>(
 
     let data: Vec<Vec<T>> = make_partitions(&data, 5);
 
+    let mut table_1nn = Table::new();
+    table_1nn.add_row(row![
+        "Partición",
+        "Tasa de clasificación",
+        "Tasa de reducción",
+        "Agregado",
+        "Tiempo"
+    ]);
+    let mut table_relief1 = table_1nn.clone();
+    let mut table_relief2 = table_1nn.clone();
+    let mut table_ls1 = table_1nn.clone();
+    let mut table_ls2 = table_1nn.clone();
+
     for i in 0..folds {
         let mut knowledge: Vec<T> = Vec::new();
         for j in 0..folds {
@@ -371,41 +373,69 @@ pub fn run<T: Data<T> + Clone + Copy>(
                 knowledge.extend(&data[j]);
             }
         }
-        println!("\tPartition test: {}", i);
         let exam = data[i].clone();
 
-        // let mut now = Instant::now();
-        // let nn_result = classifier_1nn(&knowledge, &exam, &vec![1.0; n_attrs], false);
-        // println!("\t\t1-NN results: \n{}", nn_result);
-        // println!("\t\t Time elapsed: {} ms.\n", now.elapsed().as_millis());
-
-        // now = Instant::now();
-        // let relief_result = relief(&knowledge, &exam, n_attrs, true);
-        // println!("\t\tRelief (discarding low weights) \n{}", relief_result);
-        // println!("\t\t Time Elapsed: {} ms.\n", now.elapsed().as_millis());
-
-        // now = Instant::now();
-        // let relief_result2 = relief(&knowledge, &exam, n_attrs, false);
-        // println!(
-        //     "\t\tRelief (not discarding low weights) \n{}",
-        //     relief_result2
-        // );
-        // println!("\t\t Time elapsed: {} ms.\n", now.elapsed().as_millis());
-
         let mut now = Instant::now();
+        let nn_result = classifier_1nn(&knowledge, &exam, &vec![1.0; n_attrs], false);
+        table_1nn.add_row(row![
+            i,
+            nn_result.success_percentage(),
+            nn_result.reduction_rate(),
+            nn_result.evaluation_function(),
+            now.elapsed().as_millis()
+        ]);
+
+        now = Instant::now();
+        let relief_result = relief(&knowledge, &exam, n_attrs, true);
+        table_relief1.add_row(row![
+            i,
+            relief_result.success_percentage(),
+            relief_result.reduction_rate(),
+            relief_result.evaluation_function(),
+            now.elapsed().as_millis()
+        ]);
+
+        now = Instant::now();
+        let relief_result2 = relief(&knowledge, &exam, n_attrs, false);
+        table_relief2.add_row(row![
+            i,
+            relief_result2.success_percentage(),
+            relief_result2.reduction_rate(),
+            relief_result2.evaluation_function(),
+            now.elapsed().as_millis()
+        ]);
+
+        now = Instant::now();
         let ls_result = local_search(&knowledge, &exam, n_attrs, true, false);
-        println!("\t\tLocal Search results: \n{}", ls_result);
-        println!("\t\t Time elapsed: {} ms.\n", now.elapsed().as_millis());
+        table_ls1.add_row(row![
+            i,
+            ls_result.success_percentage(),
+            ls_result.reduction_rate(),
+            ls_result.evaluation_function(),
+            now.elapsed().as_millis()
+        ]);
 
         now = Instant::now();
         let ls_result2 = local_search(&knowledge, &exam, n_attrs, true, true);
-        println!(
-            "\t\tLocal Search using greedy initial weights results: \n{}",
-            ls_result2
-        );
-        println!("\t\t Time elapsed: {} ms.\n", now.elapsed().as_millis());
-    }
 
+        table_ls2.add_row(row![
+            i,
+            ls_result2.success_percentage(),
+            ls_result2.reduction_rate(),
+            ls_result2.evaluation_function(),
+            now.elapsed().as_millis()
+        ]);
+    }
+    println!("1-NN");
+    table_1nn.printstd();
+    println!("Relief 1");
+    table_relief1.printstd();
+    println!("Relief 2");
+    table_relief2.printstd();
+    println!("Local Search 1");
+    table_ls1.printstd();
+    println!("Local Search 2");
+    table_ls2.printstd();
     Ok(())
 }
 
