@@ -1,9 +1,8 @@
 extern crate csv;
 extern crate rand;
 extern crate serde_derive;
-
-//use std::sync::{Arc, Mutex}; //TODO Concurrency
-//use std::thread;
+#[macro_use]
+extern crate prettytable;
 
 pub mod structs;
 use prettytable::Table;
@@ -13,8 +12,6 @@ use rand::thread_rng;
 use std::collections::HashMap;
 use std::time::Instant;
 use structs::*;
-#[macro_use]
-extern crate prettytable;
 
 // Normalizes the given vector and sets negatives values to 0.
 fn normalize_and_truncate_negative_weights(weights: &mut Vec<f32>) {
@@ -175,27 +172,6 @@ pub fn calculate_greedy_weights<T: Data<T> + Clone + Copy>(
     return weights;
 }
 
-/// Calls `calculate_greedy_weights` and then `classifier_1nn_weights`.
-///
-/// # Arguments
-/// * `knowledge` - Items whose class is known.
-/// * `exam` - Items whose class is unknown.
-/// * `n_attrs` - Number of attributes of the data.
-/// * `discarding_low_weights` - Boolean value, if true all weights under 0.2 are used as 0.0.
-///
-/// **Note**: Returns an instance of Results
-pub fn relief<T: Data<T> + Clone + Copy>(
-    knowledge: &Vec<T>,
-    exam: &Vec<T>,
-    n_attrs: usize,
-    discard_low_weights: bool,
-) -> Results {
-    // NOTE Initialize vector of weights.
-    let weights = calculate_greedy_weights(knowledge, n_attrs);
-
-    return classifier_1nn(&knowledge, &exam, &weights, discard_low_weights);
-}
-
 /// Adds a random value of a normal distribution N(0.0, `desv`), to the vector `weights` at the position `index_to_mutate`
 ///
 /// # Arguments
@@ -286,31 +262,59 @@ pub fn calculate_local_search_weights<T: Data<T> + Clone + Copy>(
     return weights;
 }
 
-/// Calls `calculate_local_search_weights` and then `classifier_1nn_weights`.
+/// Prepares weights using a Greedy algorithm.
 ///
 /// # Arguments
 /// * `knowledge` - Items whose class is known.
-/// * `exam` - Items whose class is unknown.
 /// * `n_attrs` - Number of attributes of the data.
-/// * `discarding_low_weights` - Boolean value, if true all weights under 0.2 are used as 0.0.
-/// # Returns
-/// An instance of Results
-pub fn local_search<T: Data<T> + Clone + Copy>(
+///
+/// # Return
+/// Returns the vector of weights
+///
+/// **Note:** If no ally is found, this algorithm doesn't work, as it isn't contemplated. I'm not fixing this becasuse it can't happen in our project.
+pub fn alter_greedy_weights<T: Data<T> + Clone + Copy>(
     knowledge: &Vec<T>,
-    exam: &Vec<T>,
     n_attrs: usize,
-    discard_low_weights: bool,
-    use_greedy_initial_weights: bool,
-) -> Results {
-    let weights: Vec<f32> = calculate_local_search_weights(
-        knowledge,
-        n_attrs,
-        discard_low_weights,
-        use_greedy_initial_weights,
-    );
+) -> Vec<f32> {
+    // NOTE Initialize vector of weights.
+    let mut weights: Vec<f32> = vec![0.0; n_attrs];
+    let mut attr_sum = vec![0.0; n_attrs];
+    // NOTE Start Greedy loop
+    for known in knowledge.iter() {
+        let mut friend_distance = std::f32::MAX;
+        let mut ally_index = 0;
 
-    let result = classifier_1nn(&knowledge, &exam, &weights, discard_low_weights);
-    return result;
+        for (index, candidate) in knowledge.iter().enumerate() {
+            // NOTE Skip if cantidate == known
+            if candidate.get_id() != known.get_id() {
+                // NOTE Pre-calculate distance
+                let dist = known.euclidean_distance(candidate);
+                if known.get_class() == candidate.get_class() {
+                    if dist < friend_distance {
+                        ally_index = index;
+                        friend_distance = dist;
+                    }
+                }
+            }
+        }
+        let ally: T = knowledge[ally_index].clone();
+        for attr in 0..n_attrs {
+            attr_sum[attr] += ally.get_attr(attr);
+        }
+    }
+
+    let mut max_value = 0.0;
+    let mut max_index = 0;
+    for attr in 0..n_attrs {
+        if attr_sum[attr] > max_value {
+            max_index = attr;
+            max_value = attr_sum[attr];
+        }
+    }
+
+    weights[max_index] = 1.0;
+
+    return weights;
 }
 
 ///  Using the csv in `path`, prepares everything to call the different classifiers.
@@ -364,12 +368,14 @@ pub fn run<T: Data<T> + Clone + Copy>(
     let mut table_relief2 = table_1nn.clone();
     let mut table_ls1 = table_1nn.clone();
     let mut table_ls2 = table_1nn.clone();
+    let mut table_greedy1 = table_1nn.clone();
 
-    let do_1nn = false;
+    let do_1nn = true;
     let do_relief1 = true;
-    let do_relief2 = false;
-    let do_ls1 = false;
-    let do_ls2 = false;
+    let do_relief2 = true;
+    let do_greedy1 = true;
+    let do_ls1 = true;
+    let do_ls2 = true;
 
     for i in 0..folds {
         let mut knowledge: Vec<T> = Vec::new();
@@ -393,7 +399,12 @@ pub fn run<T: Data<T> + Clone + Copy>(
         }
         if do_relief1 {
             let now = Instant::now();
-            let relief_result = relief(&knowledge, &exam, n_attrs, true);
+            let relief_result = classifier_1nn(
+                &knowledge,
+                &exam,
+                &calculate_greedy_weights(&knowledge, n_attrs),
+                true,
+            );
             table_relief1.add_row(row![
                 i,
                 relief_result.success_percentage(),
@@ -405,7 +416,12 @@ pub fn run<T: Data<T> + Clone + Copy>(
 
         if do_relief2 {
             let now = Instant::now();
-            let relief_result2 = relief(&knowledge, &exam, n_attrs, false);
+            let relief_result2 = classifier_1nn(
+                &knowledge,
+                &exam,
+                &calculate_greedy_weights(&knowledge, n_attrs),
+                false,
+            );
             table_relief2.add_row(row![
                 i,
                 relief_result2.success_percentage(),
@@ -415,9 +431,33 @@ pub fn run<T: Data<T> + Clone + Copy>(
             ]);
         }
 
+        if do_greedy1 {
+            let now = Instant::now();
+            let greedy_result = classifier_1nn(
+                &knowledge,
+                &exam,
+                &alter_greedy_weights(&knowledge, n_attrs),
+                true,
+            );
+            table_greedy1.add_row(row![
+                i,
+                greedy_result.success_percentage(),
+                greedy_result.reduction_rate(),
+                greedy_result.evaluation_function(),
+                now.elapsed().as_millis()
+            ]);
+        }
+
         if do_ls1 {
             let now = Instant::now();
-            let ls_result = local_search(&knowledge, &exam, n_attrs, true, false);
+
+            let ls_result = classifier_1nn(
+                &knowledge,
+                &exam,
+                &calculate_local_search_weights(&knowledge, n_attrs, true, false),
+                true,
+            );
+
             table_ls1.add_row(row![
                 i,
                 ls_result.success_percentage(),
@@ -429,7 +469,12 @@ pub fn run<T: Data<T> + Clone + Copy>(
 
         if do_ls2 {
             let now = Instant::now();
-            let ls_result2 = local_search(&knowledge, &exam, n_attrs, true, true);
+            let ls_result2 = classifier_1nn(
+                &knowledge,
+                &exam,
+                &calculate_local_search_weights(&knowledge, n_attrs, true, true),
+                true,
+            );
 
             table_ls2.add_row(row![
                 i,
@@ -452,6 +497,11 @@ pub fn run<T: Data<T> + Clone + Copy>(
         println!("Relief 2");
         table_relief2.printstd();
     }
+    if do_greedy1 {
+        println!("Greedy 1");
+        table_greedy1.printstd();
+    }
+
     if do_ls1 {
         println!("Local Search 1");
         table_ls1.printstd();
