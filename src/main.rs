@@ -591,13 +591,12 @@ pub fn compite(a: &Chromosome, b: &Chromosome) -> Chromosome {
     return b.clone();
 }
 
-pub fn generational_selection_and_CA<T: Data<T> + Clone + Copy>(
+pub fn generational_selection_and_ca<T: Data<T> + Clone + Copy>(
     generation: &HashMap<usize, Chromosome>,
     training: &Vec<T>,
     n_attrs: usize,
     rng: &mut StdRng,
 ) -> (Chromosome, Chromosome) {
-    let mut ret = Vec::<Chromosome>::new();
     let parent1 = compite(
         generation.get(&rng.gen_range(0, generation.len())).unwrap(),
         generation.get(&rng.gen_range(0, generation.len())).unwrap(),
@@ -641,7 +640,7 @@ pub fn initial_generation<T: Data<T> + Clone + Copy>(
     n_attrs: usize,
     training: &Vec<T>,
     rng: &mut StdRng,
-) -> (HashMap<usize, Chromosome>, (usize, f32)) {
+) -> (HashMap<usize, Chromosome>, usize, f32) {
     let mut generation = HashMap::new();
     let mut best_chromosome = (0, 0.0);
     for index in 0..generation_size {
@@ -658,85 +657,117 @@ pub fn initial_generation<T: Data<T> + Clone + Copy>(
         }
     }
 
-    return (generation, best_chromosome);
+    return (generation, best_chromosome.0, best_chromosome.1);
 }
 
 pub fn generational_genetic_algorithm<T: Data<T> + Clone + Copy>(
     training: &Vec<T>,
     n_attrs: usize,
     prob_cruce: usize,
+    prob_mut: usize,
     generation_size: usize,
     rng: &mut StdRng,
 ) -> Vec<f32> {
     let initial_values = initial_generation(generation_size, n_attrs, training, rng);
     let mut generation = initial_values.0;
-    let mut best_chromosome = initial_values.1;
+    let mut best_generation_index = initial_values.1;
+    let mut best_generation_value = initial_values.2;
 
-    let mut best_new_chromosome = (0, 0.0);
-    let mut worst_new_chromosome;
     let mut next_generation = HashMap::new();
     for i in 0..7500 {
         println!(
             "Generation { }, mejor resultado {} : {}",
             i,
-            best_chromosome.1,
+            best_generation_value,
             generation
-                .get(&best_chromosome.0)
+                .get(&best_generation_index)
                 .unwrap()
                 .result
                 .evaluation_function()
         );
+        let mut best_next_generation_index = 0;
+        let mut best_next_generation_value = 0.0;
+        let mut worst_next_generation_index = 0;
+        let mut worst_next_generation_value = 0.0;
 
-        best_new_chromosome = (0, 0.0);
-        worst_new_chromosome = (0, 0.0);
+        for mut index in (0..generation_size).step_by(2) {
+            if i < generation_size * prob_cruce {
+                let childrens = generational_selection_and_ca(&generation, training, n_attrs, rng);
 
-        for mut index in 0..generation_size / 2 {
-            index = index * 2;
+                next_generation.insert(index, childrens.0.clone());
+                next_generation.insert(index + 1, childrens.1.clone());
 
-            let childrens = generational_selection_and_CA(&generation, training, n_attrs, rng);
+                if best_next_generation_value < childrens.0.ev() {
+                    best_next_generation_value = childrens.0.ev();
+                    best_next_generation_index = index;
+                } else if worst_next_generation_value > childrens.0.ev() {
+                    worst_next_generation_value = childrens.0.ev();
+                    worst_next_generation_index = index;
+                }
 
-            next_generation.insert(index, childrens.0.clone());
-            index = index + 1;
-            next_generation.insert(index, childrens.1.clone());
-
-            if best_new_chromosome.1 < childrens.0.result.evaluation_function() {
-                best_new_chromosome.1 = childrens.0.result.evaluation_function();
-                best_new_chromosome.0 = index - 1;
-            } else if worst_new_chromosome.1 > childrens.0.result.evaluation_function() {
-                worst_new_chromosome.1 = childrens.0.result.evaluation_function();
-                worst_new_chromosome.0 = index - 1;
-            }
-
-            if best_new_chromosome.1 < childrens.1.result.evaluation_function() {
-                best_new_chromosome.1 = childrens.1.result.evaluation_function();
-                best_new_chromosome.0 = index;
-            } else if worst_new_chromosome.1 > childrens.1.result.evaluation_function() {
-                worst_new_chromosome.1 = childrens.1.result.evaluation_function();
-                worst_new_chromosome.0 = index;
+                if best_next_generation_value < childrens.1.ev() {
+                    best_next_generation_value = childrens.1.ev();
+                    best_next_generation_index = index + 1;
+                } else if worst_next_generation_value > childrens.1.ev() {
+                    worst_next_generation_value = childrens.1.ev();
+                    worst_next_generation_index = index + 1;
+                }
+            } else {
+                next_generation.insert(
+                    index,
+                    generation
+                        .get(&rng.gen_range(0, generation.len()))
+                        .unwrap()
+                        .clone(),
+                );
+                next_generation.insert(
+                    index,
+                    generation
+                        .get(&rng.gen_range(0, generation.len()))
+                        .unwrap()
+                        .clone(),
+                );
             }
         }
 
-        if best_new_chromosome.1 < best_chromosome.1 {
+        // NOTE Mutation
+
+        for _ in 0..prob_mut * generation_size / 100 {
+            let random_value = rng.gen_range(0, generation_size * n_attrs);
+
+            let chromosome = random_value / n_attrs;
+            let attr = random_value % n_attrs;
+
+            let mut weights = generation.get(&chromosome).unwrap().weights.clone();
+            mutate_weights(&mut weights, 0.3, attr, rng);
+            let res = classifier_1nn(training, training, &weights, true);
+            generation.insert(chromosome, Chromosome::new(&weights, res));
+
+            if res.evaluation_function() > best_next_generation_value {
+                best_next_generation_value = res.evaluation_function();
+                best_next_generation_index = chromosome;
+            }
+        }
+
+        if best_next_generation_value < best_generation_value {
             println!("El resultado es peor");
             next_generation.insert(
-                worst_new_chromosome.0,
-                generation.get(&best_chromosome.0).unwrap().clone(),
+                worst_next_generation_index,
+                generation.get(&best_generation_index).unwrap().clone(),
             );
 
-            best_chromosome = (worst_new_chromosome.0, best_chromosome.1);
+            best_generation_index = worst_next_generation_index;
         } else {
-            if best_new_chromosome.1 == best_chromosome.1 {
-                print!("Son iguales.");
-            }
             println!("El resultado ha mejorado.");
-            best_chromosome = best_new_chromosome;
+            best_generation_index = best_next_generation_index;
+            best_generation_value = best_next_generation_value;
         }
 
         generation = next_generation.clone();
     }
 
     return next_generation
-        .get(&best_new_chromosome.0)
+        .get(&best_generation_index)
         .unwrap()
         .weights
         .clone();
@@ -795,7 +826,7 @@ pub fn run_p2<T: Data<T> + Clone + Copy>(
         let res = classifier_1nn(
             &knowledge,
             &exam,
-            &generational_genetic_algorithm(&knowledge, n_attrs, 30, rng),
+            &generational_genetic_algorithm(&knowledge, n_attrs, 0.7, 0.001, 30, rng),
             true,
         );
         println!("Resultado {} ", res.evaluation_function());

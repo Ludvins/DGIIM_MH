@@ -14,6 +14,10 @@ impl Chromosome {
             result: res,
         }
     }
+
+    pub fn ev(&self) -> f32 {
+        return self.result.evaluation_function();
+    }
 }
 impl PartialEq for Chromosome {
     fn eq(&self, other: &Chromosome) -> bool {
