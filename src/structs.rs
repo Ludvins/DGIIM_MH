@@ -1,4 +1,47 @@
+use std::cmp::Ordering;
 use std::fmt;
+
+#[derive(Clone)]
+pub struct Chromosome {
+    pub weights: Vec<f32>,
+    pub result: Results,
+}
+
+impl Chromosome {
+    pub fn new(weights: &Vec<f32>, res: Results) -> Chromosome {
+        Chromosome {
+            weights: weights.clone(),
+            result: res,
+        }
+    }
+}
+impl PartialEq for Chromosome {
+    fn eq(&self, other: &Chromosome) -> bool {
+        self.result.evaluation_function() == other.result.evaluation_function()
+    }
+}
+impl Eq for Chromosome {}
+
+impl PartialOrd for Chromosome {
+    fn partial_cmp(&self, other: &Chromosome) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for Chromosome {
+    fn cmp(&self, other: &Chromosome) -> Ordering {
+        let mine = self.result.evaluation_function();
+        let him = other.result.evaluation_function();
+        if mine < him {
+            return Ordering::Less;
+        }
+        if mine > him {
+            return Ordering::Greater;
+        }
+        return Ordering::Equal;
+    }
+}
+
 /// Trait for CSV data
 ///
 /// **Note**: The struct implementing this trait must also implement `Copy` and `Clone`.
@@ -13,6 +56,7 @@ pub trait Data<T: Copy + Clone> {
     fn euclidean_distance(&self, other: &T) -> f32;
 }
 
+#[derive(Clone)]
 pub struct Results {
     pub low_weights: f32,
     pub correct_answers: f32,
