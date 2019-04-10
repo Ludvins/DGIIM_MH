@@ -21,7 +21,7 @@ impl Chromosome {
 }
 impl PartialEq for Chromosome {
     fn eq(&self, other: &Chromosome) -> bool {
-        self.result.evaluation_function() == other.result.evaluation_function()
+        return self.ev() == other.ev();
     }
 }
 impl Eq for Chromosome {}
@@ -34,12 +34,10 @@ impl PartialOrd for Chromosome {
 
 impl Ord for Chromosome {
     fn cmp(&self, other: &Chromosome) -> Ordering {
-        let mine = self.result.evaluation_function();
-        let him = other.result.evaluation_function();
-        if mine < him {
+        if self.ev() < other.ev() {
             return Ordering::Less;
         }
-        if mine > him {
+        if self.ev() > other.ev() {
             return Ordering::Greater;
         }
         return Ordering::Equal;
