@@ -3,7 +3,6 @@ use crate::types::data::*;
 use prettytable::Table;
 use rand::distributions::Uniform;
 use rand::prelude::*;
-use rand::seq::SliceRandom;
 use std::time::Instant;
 /// Prepares weights using a Greedy algorithm.
 ///
@@ -96,48 +95,16 @@ pub fn calculate_local_search_weights<T: Data<T> + Clone + Copy>(
             }
         }
     }
-
-    // NOTE Initialize vector of index
-    let mut index_vec: Vec<usize> = (0..n_attrs).collect();
-    index_vec.shuffle(rng);
-
-    let mut best_result = classifier_1nn(training, training, &weights, discard_low_weights);
-
-    let max_neighbours_without_muting = 20 * n_attrs;
-    let mut n_neighbours_generated_without_muting = 0;
-    let mut _mutations = 0;
-    for _ in 0..15000 {
-        let index_to_mute = index_vec.pop().expect("Index vector empty!.");
-        let mut muted_weights = weights.clone();
-        mutate_weights(&mut muted_weights, 0.3, index_to_mute, rng);
-
-        let muted_result = classifier_1nn(training, training, &muted_weights, discard_low_weights);
-
-        //NOTE if muted_weights is better
-        if muted_result.evaluation_function() > best_result.evaluation_function() {
-            _mutations += 1;
-            // NOTE Reset neighbours count.
-            n_neighbours_generated_without_muting = 0;
-
-            // NOTE Save new best results.
-            weights = muted_weights;
-            best_result = muted_result;
-            // NOTE Refresh index vector
-            index_vec = (0..n_attrs).collect();
-            index_vec.shuffle(rng);
-        } else {
-            n_neighbours_generated_without_muting += 1;
-            if n_neighbours_generated_without_muting == max_neighbours_without_muting {
-                break;
-            }
-            //NOTE if no more index to mutate, recharge them.
-            if index_vec.is_empty() {
-                index_vec = (0..n_attrs).collect();
-                index_vec.shuffle(rng);
-            }
-        }
-    }
-    //println!("Mutations: {}", _mutations);
+    let mut result = classifier_1nn(training, training, &weights, true);
+    local_search(
+        training,
+        n_attrs,
+        &mut weights,
+        &mut result,
+        15000,
+        rng,
+        discard_low_weights,
+    );
     return weights;
 }
 
@@ -250,12 +217,12 @@ pub fn run_p1<T: Data<T> + Clone + Copy>(
     let mut table_greedy1 = table_1nn.clone();
 
     let do_1nn = true;
-    let do_relief1 = true;
-    let do_relief2 = true;
-    let do_greedy1 = true;
-    let do_ls1 = true;
-    let do_ls2 = true;
-    let do_ls3 = true;
+    let do_relief1 = false;
+    let do_relief2 = false;
+    let do_greedy1 = false;
+    let do_ls1 = false;
+    let do_ls2 = false;
+    let do_ls3 = false;
 
     for i in 0..folds {
         let mut knowledge: Vec<T> = Vec::new();

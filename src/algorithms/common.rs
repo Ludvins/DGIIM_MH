@@ -24,6 +24,55 @@ pub fn normalize_and_truncate_negative_weights(weights: &mut Vec<f32>) {
     }
 }
 
+pub fn local_search<T: Data<T> + Clone + Copy>(
+    training: &Vec<T>,
+    n_attrs: usize,
+    weights: &mut Vec<f32>,
+    result: &mut Results,
+    max_calls_to_ev: usize,
+    rng: &mut StdRng,
+    discard_low_weights: bool,
+) {
+    // NOTE Initialize vector of index
+    let mut index_vec: Vec<usize> = (0..n_attrs).collect();
+    index_vec.shuffle(rng);
+
+    let max_neighbours_without_muting = 20 * n_attrs;
+    let mut n_neighbours_generated_without_muting = 0;
+    let mut _mutations = 0;
+    for _ in 0..max_calls_to_ev {
+        let index_to_mute = index_vec.pop().expect("Index vector empty!.");
+        let mut muted_weights = weights.clone();
+        mutate_weights(&mut muted_weights, 0.3, index_to_mute, rng);
+
+        let muted_result = classifier_1nn(training, training, &muted_weights, discard_low_weights);
+
+        //NOTE if muted_weights is better
+        if muted_result.evaluation_function() > result.evaluation_function() {
+            _mutations += 1;
+            // NOTE Reset neighbours count.
+            n_neighbours_generated_without_muting = 0;
+
+            // NOTE Save new best results.
+            *weights = muted_weights;
+            *result = muted_result;
+            // NOTE Refresh index vector
+            index_vec = (0..n_attrs).collect();
+            index_vec.shuffle(rng);
+        } else {
+            n_neighbours_generated_without_muting += 1;
+            if n_neighbours_generated_without_muting == max_neighbours_without_muting {
+                break;
+            }
+            //NOTE if no more index to mutate, recharge them.
+            if index_vec.is_empty() {
+                index_vec = (0..n_attrs).collect();
+                index_vec.shuffle(rng);
+            }
+        }
+    }
+}
+
 /// Makes partitions keeping the class diversity.
 ///
 /// # Arguments
