@@ -9,6 +9,7 @@ use prettytable::Table;
 use rand::distributions::{Distribution, Normal, Uniform};
 use rand::prelude::*;
 use rand::seq::SliceRandom;
+use std::collections::BTreeSet;
 use std::collections::HashMap;
 use std::time::Instant;
 use structs::*;
@@ -566,49 +567,62 @@ pub fn run_p1<T: Data<T> + Clone + Copy>(
 // ********************************************************************************************************
 // ********************************************************************************************************
 
-pub fn low_intensity_local_search_weights<T: Data<T> + Clone + Copy>(
+pub fn truncate(value: f32) -> f32 {
+    let mut ret = value;
+    if ret < 0.0 {
+        ret = 0.0;
+    } else if ret > 1.0 {
+        ret = 1.0;
+    }
+
+    return ret;
+}
+
+pub fn fitness_function<T: Data<T> + Clone + Copy>(training: &Vec<T>, chromosome: &mut Chromosome) {
+    chromosome.result =
+        classifier_1nn(training, training, &chromosome.weights, true).evaluation_function();
+}
+
+pub fn memetic_local_search_weights<T: Data<T> + Clone + Copy>(
     training: &Vec<T>,
-    weights: &mut Vec<f32>,
+    chromosome: &mut Chromosome,
     n_attrs: usize,
     rng: &mut StdRng,
-) -> Chromosome {
-    // NOTE Initialize vector of index
+) -> usize {
+    let mut n_evaluations = 0;
     let mut index_vec: Vec<usize> = (0..n_attrs).collect();
-    let mut aux_vec = index_vec.clone();
     index_vec.shuffle(rng);
-    aux_vec.shuffle(rng);
-    index_vec.append(&mut aux_vec);
-
-    let mut best_result = classifier_1nn(training, training, weights, true);
 
     let mut _mutations = 0;
-    for index_to_mute in index_vec {
-        let mut muted_weights = weights.clone();
-        mutate_weights(&mut muted_weights, 0.3, index_to_mute, rng);
+    for _ in 0..2 * n_attrs {
+        if index_vec.is_empty() {
+            index_vec = (0..n_attrs).collect();
+            index_vec.shuffle(rng);
+        }
+        let index_to_mutate = index_vec.pop().expect("Vector of indexes is empty");
+        let mut muted_weights = chromosome.weights.clone();
+        mutate_weights(&mut muted_weights, 0.3, index_to_mutate, rng);
 
-        let muted_result = classifier_1nn(training, training, &muted_weights, true);
-
-        //NOTE if muted_weights is better
-        if muted_result.evaluation_function() > best_result.evaluation_function() {
+        let muted_result =
+            classifier_1nn(training, training, &muted_weights, true).evaluation_function();
+        n_evaluations += 1;
+        if muted_result > chromosome.result {
+            index_vec.clear();
             _mutations += 1;
 
-            // NOTE Save new best results.
-            *weights = muted_weights.clone();
-            best_result = muted_result;
-            // NOTE Refresh index vector
+            chromosome.weights = muted_weights;
+            chromosome.result = muted_result;
         }
     }
-    //println!("Mutations: {}", _mutations);
-    return Chromosome::new(&weights, best_result);
+    return n_evaluations;
 }
 
 pub fn compite(a: &Chromosome, b: &Chromosome) -> Chromosome {
-    if a.result.evaluation_function() >= b.result.evaluation_function() {
+    if a.result > b.result {
         return a.clone();
     }
     return b.clone();
 }
-
 pub fn initial_generation<T: Data<T> + Clone + Copy>(
     generation_size: usize,
     n_attrs: usize,
@@ -623,9 +637,42 @@ pub fn initial_generation<T: Data<T> + Clone + Copy>(
             weights[attr] += uniform.sample(rng);
         }
         let res = classifier_1nn(training, training, &weights, true);
-        generation.push(Chromosome::new(&weights, res.clone()));
+        generation.push(Chromosome::new(&weights, res.evaluation_function()));
     }
     generation.sort();
+
+    return generation;
+}
+
+pub fn initial_generation2<T: Data<T> + Clone + Copy>(
+    generation_size: usize,
+    n_attrs: usize,
+    training: &Vec<T>,
+    rng: &mut StdRng,
+) -> Vec<Chromosome> {
+    let mut generation = Vec::<Chromosome>::new();
+    for _ in 0..generation_size {
+        let mut weights: Vec<f32> = vec![0.0; n_attrs];
+        let uniform = Uniform::new(0.0, 1.0);
+        for attr in 0..n_attrs {
+            weights[attr] += uniform.sample(rng);
+        }
+        let res = classifier_1nn(training, training, &weights, true);
+        generation.push(Chromosome::new(&weights, res.evaluation_function()));
+    }
+    generation.sort();
+
+    generation.remove(0);
+    generation.remove(0);
+    let w = calculate_relief_weights(training, n_attrs);
+    let res = classifier_1nn(training, training, &w, true);
+    generation.push(Chromosome::new(&w, res.evaluation_function()));
+    let w = alter_greedy_weights(training, n_attrs);
+    let res = classifier_1nn(training, training, &w, true);
+    generation.push(Chromosome::new(&w, res.evaluation_function()));
+
+    generation.sort();
+
     return generation;
 }
 
@@ -652,43 +699,27 @@ pub fn weighted_selection(
     let mut ret: Vec<Chromosome> = Vec::new();
 
     let uniform = Uniform::new(0.0, 1.0);
-    let mut total_sum = 0.0;
-    for chromosome in generation {
-        total_sum = total_sum + chromosome.ev();
-    }
+    let total_sum: f32 = generation.iter().map(|x| x.result).sum();
 
     let mut weights: Vec<f32> = Vec::new();
 
     let mut acumulative = 0.0;
     for chromosome in generation {
-        acumulative = acumulative + chromosome.ev() / total_sum;
+        acumulative = acumulative + chromosome.result / total_sum;
         weights.push(acumulative);
     }
 
     for _ in 0..select_n {
         let random: f32 = uniform.sample(rng);
-        let mut parent1 = generation.get(0).expect("Generation is empty");
-        let mut parent2 = generation.get(0).expect("Generation is empty");
         for i in 0..weights.len() {
             if random < weights[i] {
-                parent1 = generation
+                let parent1 = generation
                     .get(i)
                     .expect("Random number is over the limits of the generation");
+                ret.push(parent1.clone());
                 break;
             }
         }
-        let random = uniform.sample(rng);
-
-        for i in 0..weights.len() {
-            if random < weights[i] {
-                parent2 = generation
-                    .get(i)
-                    .expect("Random number is ober the limits of the generation");
-                break;
-            }
-        }
-
-        ret.push(compite(parent1, parent2));
     }
     return ret;
 }
@@ -704,7 +735,7 @@ pub fn aritmethic_cross(
     for _ in 0..(n_childs / 2) {
         let parent2 = parents.pop().expect("[ARITH]: No more parents");
         let parent1 = parents.pop().expect("[ARITH]: No more parents");
-        let mut weights1 = vec![0.0; parent1.weights.len()];
+        let mut weights1 = vec![0.0; n_attrs];
         let mut weights2 = weights1.clone();
 
         for i in 0..n_attrs {
@@ -730,44 +761,33 @@ pub fn blx_alpha_cross(
     for _ in 0..(n_childs / 2) {
         let parent2 = parents.pop().expect("[BLX]: No more parents");
         let parent1 = parents.pop().expect("[BLX]: No more parents");
-        let mut weights1 = vec![0.0; parent1.weights.len()];
-        let mut weights2 = vec![0.0; parent1.weights.len()];
+        let mut weights1 = vec![0.0; n_attrs];
+        let mut weights2 = vec![0.0; n_attrs];
 
         for i in 0..n_attrs {
-            let mut c_max = 0.0;
-            let mut c_min = 1.0;
-            if parent1.weights[i] > c_max {
-                c_max = parent1.weights[i];
-            }
-            if parent1.weights[i] < c_min {
-                c_min = parent1.weights[i];
-            }
-            if parent2.weights[i] > c_max {
+            let c_max;
+            let c_min;
+            if parent1.weights[i] < parent2.weights[i] {
                 c_max = parent2.weights[i];
-            }
-            if parent2.weights[i] < c_min {
+                c_min = parent1.weights[i];
+            } else if parent1.weights[i] > parent2.weights[i] {
+                c_max = parent1.weights[i];
                 c_min = parent2.weights[i];
-            }
-
-            let mut lower_bound = c_min - alpha * (c_max - c_min);
-            let mut upper_bound = c_max + alpha * (c_max - c_min);
-
-            if lower_bound < 0.0 {
-                lower_bound = 0.0;
-            }
-            if upper_bound > 1.0 {
-                upper_bound = 1.0;
-            }
-
-            if lower_bound == upper_bound {
-                weights1[i] = lower_bound;
-                weights2[i] = lower_bound;
             } else {
-                weights1[i] = rng.gen_range(lower_bound, upper_bound);
-                weights2[i] = rng.gen_range(lower_bound, upper_bound);
+                weights1[i] = parent1.weights[i];
+                weights2[i] = parent1.weights[i];
+                continue;
             }
-        }
 
+            let lower_bound = c_min - alpha * (c_max - c_min);
+            let upper_bound = c_max + alpha * (c_max - c_min);
+
+            let value1 = rng.gen_range(lower_bound, upper_bound);
+            let value2 = rng.gen_range(lower_bound, upper_bound);
+
+            weights1[i] += truncate(value1);
+            weights2[i] += truncate(value2);
+        }
         children.push(weights1);
         children.push(weights2);
     }
@@ -775,43 +795,77 @@ pub fn blx_alpha_cross(
     return children;
 }
 
-pub fn generational(last_generation: &Vec<Chromosome>, next_generation: &mut Vec<Chromosome>) {
-    let best_of_last_generation = last_generation
-        .last()
-        .expect("Last generation is empty.")
-        .clone();
-    let best_of_this_generation = next_generation
-        .last()
-        .expect("Current Generation is empty")
-        .clone();
+pub fn stationary_iteration<T: Data<T> + Copy + Clone>(
+    generation: &Vec<Chromosome>,
+    training: &Vec<T>,
+    n_attrs: usize,
+    mut_prob: f32,
+    selection_operator: fn(&Vec<Chromosome>, usize, &mut StdRng) -> Vec<Chromosome>,
+    cross_operator: fn(&mut Vec<Chromosome>, usize, usize, &mut StdRng) -> Vec<Vec<f32>>,
+    rng: &mut StdRng,
+) -> (Vec<Chromosome>, usize) {
+    let mut n_calls_to_ev = 0;
 
-    if best_of_this_generation.ev() < best_of_last_generation.ev() {
-        next_generation.remove(0);
-        next_generation.push(best_of_last_generation.clone());
+    let mut parents = selection_operator(&generation, 2, rng);
+
+    let mut children = cross_operator(&mut parents, 2, n_attrs, rng);
+
+    let n_muts = mut_prob * n_attrs as f32 * 2 as f32;
+    let mut trunc = n_muts as usize;
+    let dec = n_muts - trunc as f32;
+    if rng.gen_range(0.0, 1.0) < dec as f32 {
+        trunc += 1;
     }
-}
 
-pub fn stationary(last_generation: &Vec<Chromosome>, next_generation: &mut Vec<Chromosome>) {
-    next_generation.remove(0);
-    next_generation.remove(0);
+    let mut nums: BTreeSet<usize> = BTreeSet::new();
+    while nums.len() < trunc {
+        nums.insert(rng.gen_range(0, 2 * n_attrs));
+    }
+    for random_value in nums.iter() {
+        let child = random_value / n_attrs;
+        let attr = random_value % n_attrs;
+        mutate_weights(&mut children[child], 0.3, attr, rng);
+    }
 
-    next_generation.push(
-        last_generation
-            .get(last_generation.len() - 2)
-            .cloned()
-            .expect("Generation isnt big enought"),
-    );
-    next_generation.push(
-        last_generation
-            .last()
-            .cloned()
-            .expect("Generation is empty"),
-    );
+    let mut next_generation: Vec<Chromosome> = children
+        .iter()
+        .map(|x| {
+            Chromosome::new(
+                &x,
+                classifier_1nn(training, training, &x, true).evaluation_function(),
+            )
+        })
+        .collect();
+
+    n_calls_to_ev += next_generation.len();
 
     next_generation.sort();
+
+    let worst_child = next_generation.get(0).expect("Generation is empty").clone();
+    let best_child = next_generation
+        .get(1)
+        .expect("Generation isnt big enought")
+        .clone();
+
+    let worst = generation.get(0).expect("Generation is empty");
+    let best = generation.get(1).expect("Generation isnt big enought");
+    if best_child.result < worst.result {
+        next_generation.clear();
+        next_generation.push(best.clone());
+        next_generation.push(worst.clone());
+    } else if worst_child.result < best.result {
+        next_generation.remove(0);
+        next_generation.push(best.clone());
+    }
+
+    next_generation.extend_from_slice(&mut (generation.clone())[2..]);
+
+    next_generation.sort();
+
+    return (next_generation, n_calls_to_ev);
 }
 
-pub fn genetic_iteration<T: Data<T> + Clone + Copy>(
+pub fn generational_iteration<T: Data<T> + Clone + Copy>(
     generation: &Vec<Chromosome>,
     training: &Vec<T>,
     n_attrs: usize,
@@ -820,7 +874,6 @@ pub fn genetic_iteration<T: Data<T> + Clone + Copy>(
     generation_size: usize,
     selection_operator: fn(&Vec<Chromosome>, usize, &mut StdRng) -> Vec<Chromosome>,
     cross_operator: fn(&mut Vec<Chromosome>, usize, usize, &mut StdRng) -> Vec<Vec<f32>>,
-    replacement: fn(&Vec<Chromosome>, &mut Vec<Chromosome>),
     rng: &mut StdRng,
 ) -> (Vec<Chromosome>, usize) {
     let mut n_calls_to_ev = 0;
@@ -834,59 +887,67 @@ pub fn genetic_iteration<T: Data<T> + Clone + Copy>(
         rng,
     );
 
-    let mut next_generation: Vec<Chromosome> = children
-        .iter()
-        .map(|x| Chromosome::new(&x, classifier_1nn(training, training, &x, true)))
-        .collect();
-    n_calls_to_ev += next_generation.len();
+    let mut next_generation: Vec<Chromosome> =
+        children.iter().map(|x| Chromosome::new_w(&x)).collect();
 
     // NOTE La generación no esta completa, no todos los padres se cruzan.
-    for i in 0..generation_size - children.len() {
-        next_generation.push(
-            parents
-                .get(i)
-                .expect("Parents vector has no more elements")
-                .clone(),
-        );
+    for p in parents.iter() {
+        next_generation.push(p.clone());
     }
 
-    let mut n_muts = (mut_prob * generation_size as f32) as usize;
-    if n_muts < 1 {
-        n_muts = 1;
+    let n_muts = mut_prob * n_attrs as f32 * generation_size as f32;
+    let mut trunc = n_muts as usize;
+    let dec = n_muts - trunc as f32;
+    if rng.gen_range(0.0, 1.0) < dec as f32 {
+        trunc += 1;
     }
+
     // NOTE Mutation
-    for _ in 0..n_muts {
-        let random_value = rng.gen_range(0, generation_size * n_attrs);
+    let mut nums: BTreeSet<usize> = BTreeSet::new();
+    while nums.len() < trunc {
+        nums.insert(rng.gen_range(0, generation_size * n_attrs));
+    }
+
+    for random_value in nums.iter() {
         let chromosome = random_value / n_attrs;
         let attr = random_value % n_attrs;
-
         mutate_weights(&mut next_generation[chromosome].weights, 0.3, attr, rng);
+        next_generation[chromosome].result = -1.0;
+    }
 
-        next_generation[chromosome].result = classifier_1nn(
-            training,
-            training,
-            &next_generation[chromosome].weights,
-            true,
-        );
-        n_calls_to_ev += 1;
+    for chromosome in next_generation.iter_mut() {
+        if chromosome.result == -1.0 {
+            fitness_function(training, chromosome);
+            n_calls_to_ev += 1;
+        }
     }
 
     next_generation.sort();
 
-    replacement(&generation, &mut next_generation);
+    let best_of_last_generation = generation
+        .last()
+        .expect("Last generation is empty.")
+        .clone();
+    let best_of_this_generation = next_generation
+        .last()
+        .expect("Current Generation is empty")
+        .clone();
 
-    return (next_generation.clone(), n_calls_to_ev);
+    if best_of_this_generation.result < best_of_last_generation.result {
+        next_generation.remove(0);
+        next_generation.push(best_of_last_generation.clone());
+    }
+
+    return (next_generation, n_calls_to_ev);
 }
 
-pub fn genetic_algorithm<T: Data<T> + Clone + Copy>(
+pub fn genetic_stationary_algorithm<T: Data<T> + Clone + Copy>(
     training: &Vec<T>,
     n_attrs: usize,
-    cross_prob: f32,
     mut_prob: f32,
     generation_size: usize,
     selection_operator: fn(&Vec<Chromosome>, usize, &mut StdRng) -> Vec<Chromosome>,
     cross_operator: fn(&mut Vec<Chromosome>, usize, usize, &mut StdRng) -> Vec<Vec<f32>>,
-    replacement: fn(&Vec<Chromosome>, &mut Vec<Chromosome>),
     rng: &mut StdRng,
 ) -> Vec<f32> {
     let mut generation: Vec<Chromosome> =
@@ -897,16 +958,13 @@ pub fn genetic_algorithm<T: Data<T> + Clone + Copy>(
     let mut n_calls_to_ev = generation_size;
     let mut _n_generation = 0;
     while n_calls_to_ev < 15000 {
-        let iteration = genetic_iteration::<T>(
+        let iteration = stationary_iteration::<T>(
             &generation,
             training,
             n_attrs,
-            cross_prob,
             mut_prob,
-            generation_size,
             selection_operator,
             cross_operator,
-            replacement,
             rng,
         );
 
@@ -920,11 +978,67 @@ pub fn genetic_algorithm<T: Data<T> + Clone + Copy>(
         //     n_calls_to_ev,
         //     15000,
         //     generation.len(),
-        //     generation.last().expect("Generation is empty").ev()
+        //     generation.last().expect("Generation is empty").result
         // );
 
         // for c in generation.iter() {
-        //     println!(" {} ", c.ev());
+        //     println!(" {} ", c.result);
+        // }
+        // println!("\n");
+    }
+
+    return generation
+        .last()
+        .expect("Last generation is empty.")
+        .weights
+        .clone();
+}
+
+pub fn genetic_generational_algorithm<T: Data<T> + Clone + Copy>(
+    training: &Vec<T>,
+    n_attrs: usize,
+    cross_prob: f32,
+    mut_prob: f32,
+    generation_size: usize,
+    selection_operator: fn(&Vec<Chromosome>, usize, &mut StdRng) -> Vec<Chromosome>,
+    cross_operator: fn(&mut Vec<Chromosome>, usize, usize, &mut StdRng) -> Vec<Vec<f32>>,
+    rng: &mut StdRng,
+) -> Vec<f32> {
+    let mut generation: Vec<Chromosome> =
+        initial_generation(generation_size, n_attrs, training, rng)
+            .into_iter()
+            .collect();
+
+    let mut n_calls_to_ev = generation_size;
+    let mut _n_generation = 0;
+    while n_calls_to_ev < 15000 {
+        let iteration = generational_iteration::<T>(
+            &generation,
+            training,
+            n_attrs,
+            cross_prob,
+            mut_prob,
+            generation_size,
+            selection_operator,
+            cross_operator,
+            rng,
+        );
+
+        _n_generation += 1;
+        generation = iteration.0;
+        n_calls_to_ev += iteration.1;
+
+        // println!(
+        //     "Generation {} ({}/{}):\n\tGeneration size: {}\n\tBest of generátion: {}",
+        //     _n_generation,
+        //     n_calls_to_ev,
+        //     15000,
+        //     generation.len(),
+        //     generation.last().expect("Generation is empty").result
+        // );
+
+        // for c in generation.iter() {
+        //     println!(" {} ", c.result);
         // }
         // println!("\n");
     }
@@ -945,11 +1059,10 @@ pub fn memetic_algorithm<T: Data<T> + Clone + Copy>(
     memetic_type: usize,
     selection_operator: fn(&Vec<Chromosome>, usize, &mut StdRng) -> Vec<Chromosome>,
     cross_operator: fn(&mut Vec<Chromosome>, usize, usize, &mut StdRng) -> Vec<Vec<f32>>,
-    replacement: fn(&Vec<Chromosome>, &mut Vec<Chromosome>),
     rng: &mut StdRng,
 ) -> Vec<f32> {
     let mut generation: Vec<Chromosome> =
-        initial_generation(generation_size, n_attrs, training, rng)
+        initial_generation2(generation_size, n_attrs, training, rng)
             .into_iter()
             .collect();
 
@@ -957,7 +1070,11 @@ pub fn memetic_algorithm<T: Data<T> + Clone + Copy>(
     let mut _n_generation = 0;
     'outer: loop {
         for _ in 0..10 {
-            let iteration = genetic_iteration::<T>(
+            if n_calls_to_ev >= 15000 {
+                break 'outer;
+            }
+
+            let iteration = generational_iteration::<T>(
                 &generation,
                 training,
                 n_attrs,
@@ -966,7 +1083,6 @@ pub fn memetic_algorithm<T: Data<T> + Clone + Copy>(
                 generation_size,
                 selection_operator,
                 cross_operator,
-                replacement,
                 rng,
             );
 
@@ -974,66 +1090,52 @@ pub fn memetic_algorithm<T: Data<T> + Clone + Copy>(
             generation = iteration.0;
             n_calls_to_ev += iteration.1;
 
-            println!(
-                "Generation {} ({}/{}):\n\tGeneration size: {}\n\tBest of generátion: {}",
-                _n_generation,
-                n_calls_to_ev,
-                15000,
-                generation.len(),
-                generation.last().expect("Generation is empty").ev()
-            );
+            // println!(
+            //     "Generation {} ({}/{}):\n\tGeneration size: {}\n\tBest of generátion: {}",
+            //     _n_generation,
+            //     n_calls_to_ev,
+            //     15000,
+            //     generation.len(),
+            //     generation.last().expect("Generation is empty").result
+            // );
 
             // for c in generation.iter() {
-            //     println!(" {} ", c.ev());
+            //     println!(" {} ", c.result);
             // }
             // println!("\n");
-
-            if n_calls_to_ev >= 15000 {
-                break 'outer;
-            }
         }
 
         match memetic_type {
-            1 => {
-                for index in 0..generation_size {
-                    generation[index] = low_intensity_local_search_weights(
-                        training,
-                        &mut generation[index].weights,
-                        n_attrs,
-                        rng,
-                    )
-                }
-                ()
-            }
-
             2 => {
                 let selected: Vec<usize> =
                     (0..generation_size).choose_multiple(rng, generation_size / 10);
+                // for c in generation.iter() {
+                //     println!(" {} ", c.result);
+                // }
+                // println!("\n");
 
                 for index in selected {
-                    generation[index] = low_intensity_local_search_weights(
-                        training,
-                        &mut generation[index].weights,
-                        n_attrs,
-                        rng,
-                    )
+                    n_calls_to_ev +=
+                        memetic_local_search_weights(training, &mut generation[index], n_attrs, rng)
                 }
-                ()
+                // for c in generation.iter() {
+                //     println!(" {} ", c.result);
+                // }
+                // println!("\n");
             }
 
             3 => {
-                for index in 0..10 {
-                    generation[index] = low_intensity_local_search_weights(
-                        training,
-                        &mut generation[index].weights,
-                        n_attrs,
-                        rng,
-                    )
+                for index in generation_size - generation_size / 10..generation_size {
+                    n_calls_to_ev +=
+                        memetic_local_search_weights(training, &mut generation[index], n_attrs, rng)
                 }
-                ()
             }
-
-            _ => (),
+            _ => {
+                for index in 0..generation_size {
+                    n_calls_to_ev +=
+                        memetic_local_search_weights(training, &mut generation[index], n_attrs, rng)
+                }
+            }
         }
 
         generation.sort();
@@ -1087,14 +1189,14 @@ pub fn run_p2<T: Data<T> + Clone + Copy>(
 
     let data: Vec<Vec<T>> = make_partitions(&data, 5);
 
-    let do_generational_arith = false;
-    let do_generational_blx = false;
-    let do_stationary_arith = false;
-    let do_stationary_blx = false;
-    let do_roulette = true;
-    let do_memetic1 = false;
-    let do_memetic2 = false;
-    let do_memetic3 = false;
+    let do_generational_arith = true;
+    let do_generational_blx = true;
+    let do_stationary_arith = true;
+    let do_stationary_blx = true;
+    let do_roulette = false;
+    let do_memetic1 = true;
+    let do_memetic2 = true;
+    let do_memetic3 = true;
 
     let mut table_generational_arith = Table::new();
     table_generational_arith.add_row(row![
@@ -1127,7 +1229,7 @@ pub fn run_p2<T: Data<T> + Clone + Copy>(
             let res = classifier_1nn(
                 &knowledge,
                 &exam,
-                &genetic_algorithm(
+                &genetic_generational_algorithm(
                     &knowledge,
                     n_attrs,
                     0.7,
@@ -1135,7 +1237,6 @@ pub fn run_p2<T: Data<T> + Clone + Copy>(
                     30,
                     binary_tournament,
                     aritmethic_cross,
-                    generational,
                     rng,
                 ),
                 true,
@@ -1155,7 +1256,7 @@ pub fn run_p2<T: Data<T> + Clone + Copy>(
             let res = classifier_1nn(
                 &knowledge,
                 &exam,
-                &genetic_algorithm(
+                &genetic_generational_algorithm(
                     &knowledge,
                     n_attrs,
                     0.7,
@@ -1163,7 +1264,6 @@ pub fn run_p2<T: Data<T> + Clone + Copy>(
                     30,
                     binary_tournament,
                     blx_alpha_cross,
-                    generational,
                     rng,
                 ),
                 true,
@@ -1183,15 +1283,13 @@ pub fn run_p2<T: Data<T> + Clone + Copy>(
             let res = classifier_1nn(
                 &knowledge,
                 &exam,
-                &genetic_algorithm(
+                &genetic_stationary_algorithm(
                     &knowledge,
                     n_attrs,
-                    0.7,
                     0.001,
                     30,
                     binary_tournament,
                     aritmethic_cross,
-                    stationary,
                     rng,
                 ),
                 true,
@@ -1211,15 +1309,13 @@ pub fn run_p2<T: Data<T> + Clone + Copy>(
             let res = classifier_1nn(
                 &knowledge,
                 &exam,
-                &genetic_algorithm(
+                &genetic_stationary_algorithm(
                     &knowledge,
                     n_attrs,
-                    0.7,
                     0.001,
                     30,
                     binary_tournament,
                     blx_alpha_cross,
-                    generational,
                     rng,
                 ),
                 true,
@@ -1239,7 +1335,7 @@ pub fn run_p2<T: Data<T> + Clone + Copy>(
             let res = classifier_1nn(
                 &knowledge,
                 &exam,
-                &genetic_algorithm(
+                &genetic_generational_algorithm(
                     &knowledge,
                     n_attrs,
                     0.7,
@@ -1247,7 +1343,6 @@ pub fn run_p2<T: Data<T> + Clone + Copy>(
                     30,
                     weighted_selection,
                     blx_alpha_cross,
-                    generational,
                     rng,
                 ),
                 true,
@@ -1272,11 +1367,10 @@ pub fn run_p2<T: Data<T> + Clone + Copy>(
                     n_attrs,
                     0.7,
                     0.001,
-                    30,
+                    10,
                     1,
                     binary_tournament,
                     blx_alpha_cross,
-                    generational,
                     rng,
                 ),
                 true,
@@ -1300,11 +1394,10 @@ pub fn run_p2<T: Data<T> + Clone + Copy>(
                     n_attrs,
                     0.7,
                     0.001,
-                    30,
+                    10,
                     2,
                     binary_tournament,
                     blx_alpha_cross,
-                    generational,
                     rng,
                 ),
                 true,
@@ -1328,11 +1421,10 @@ pub fn run_p2<T: Data<T> + Clone + Copy>(
                     n_attrs,
                     0.7,
                     0.001,
-                    30,
+                    10,
                     3,
                     binary_tournament,
                     blx_alpha_cross,
-                    generational,
                     rng,
                 ),
                 true,
@@ -1363,7 +1455,7 @@ pub fn run_p2<T: Data<T> + Clone + Copy>(
         table_stationary_arith.printstd();
     }
 
-    if do_generational_arith {
+    if do_stationary_blx {
         println!("Estacionario con cruce BLX");
         table_stationary_blx.printstd();
     }
@@ -1388,7 +1480,6 @@ pub fn run_p2<T: Data<T> + Clone + Copy>(
 
     Ok(())
 }
-
 /////////////////////////////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1403,14 +1494,18 @@ pub fn run_p2<T: Data<T> + Clone + Copy>(
 pub fn metrop(diff: f32, t: f32, rng: &mut StdRng) -> bool {
     //TODO aqui hay una k
 
+    let mut difference = diff;
+    if diff == 0.0 {
+        difference = 0.005;
+    }
     let uniform = Uniform::new(0.0, 1.0);
     let random = uniform.sample(rng);
-    let exp_value = (-1 as f32 * diff as f32 / t).exp();
+    let exp_value = (-1 as f32 * difference as f32 / t).exp();
     // println!(
     //     "[Metrop]: Valor aleatorio {}, exp {}, diff {}",
-    //     random, exp_value, diff
-    //);
-    return diff < 0.0 || random <= exp_value;
+    //     random, exp_value, difference
+    // );
+    return difference < 0.0 || random <= exp_value;
 }
 
 pub fn annealing<T: Data<T> + Clone + Copy>(
@@ -1432,7 +1527,10 @@ pub fn annealing<T: Data<T> + Clone + Copy>(
     let mut actual_cost = best_cost;
     let initial_temp = 0.3 * actual_cost as f32 / (-1 as f32 * (0.3 as f32).ln());
     let mut temp = initial_temp;
-    let final_temp = 0.001; //TODO Test if lower than initial
+    let mut final_temp = 0.001;
+    if final_temp >= initial_temp {
+        final_temp = initial_temp / 1000.0;
+    }
     let mut n_calls_to_ev = 1;
 
     // NOTE Loop with tag
@@ -1440,8 +1538,8 @@ pub fn annealing<T: Data<T> + Clone + Copy>(
         let mut n_success = 0;
         for _ in 0..max_neighbours {
             // println!(
-            //     "Valor: {}\nTemperatura: {}\nTemperatura final: {}\nNúmero de exitos: {}\nNúmero llamadas a la funcion de evaluación: {}",
-            //     best_cost, temp, final_temp, n_success, n_calls_to_ev
+            // "Valor: {}\nTemperatura: {}\nTemperatura final: {}\nNúmero de exitos: {}\nNúmero llamadas a la funcion de evaluación: {}",
+            // best_cost, temp, final_temp, n_success, n_calls_to_ev
             // );
             let mut neighbour = actual_solution.clone();
             // NOTE Misma mutación que en las otras practicas.
@@ -1495,10 +1593,10 @@ pub fn iterated_local_search<T: Data<T> + Clone + Copy>(
         best_weights[attr] += uniform.sample(rng);
     }
 
-    let now = Instant::now();
+    // let now = Instant::now();
     let mut best_results = classifier_1nn(training, training, &best_weights, true);
-    println!("{}", now.elapsed().as_millis());
-    let now = Instant::now();
+    // println!("{}", now.elapsed().as_millis());
+    // let now = Instant::now();
     local_search(
         training,
         n_attrs,
@@ -1508,9 +1606,9 @@ pub fn iterated_local_search<T: Data<T> + Clone + Copy>(
         rng,
         true,
     );
-    println!("{}", now.elapsed().as_millis());
+    // println!("{}", now.elapsed().as_millis());
     for _ in 0..14 {
-        println!("Mejor: {}", best_results);
+        // println!("Mejor: {}", best_results);
         let mut muted_weights = best_weights.clone();
         let indexes = (0..n_attrs).choose_multiple(rng, n_attrs / 10);
         for index in indexes {
@@ -1536,6 +1634,110 @@ pub fn iterated_local_search<T: Data<T> + Clone + Copy>(
     }
 
     return best_weights;
+}
+
+pub fn de_rand_iteration<T: Data<T> + Copy + Clone>(
+    training: &Vec<T>,
+    generation: &Vec<Chromosome>,
+    generation_size: usize,
+    n_attrs: usize,
+    rng: &mut StdRng,
+) -> Vec<Chromosome> {
+    let uniform = Uniform::new(0.0, 1.0);
+    let mut new_generation: Vec<Chromosome> = Vec::new();
+
+    for index in 0..generation_size {
+        let parents: Vec<Chromosome> = generation.choose_multiple(rng, 3).cloned().collect();
+        let mut offspring = vec![0.0; n_attrs];
+        for attr in 0..n_attrs {
+            if uniform.sample(rng) < 0.5 {
+                offspring[attr] = truncate(
+                    parents[0].weights[attr]
+                        + 0.5 * (parents[1].weights[attr] - parents[2].weights[attr]),
+                );
+            } else {
+                offspring[attr] = generation[index].weights[attr];
+            }
+        }
+        let mut new: Chromosome = Chromosome::new_w(&offspring);
+        fitness_function(training, &mut new);
+        new_generation.push(new);
+    }
+    return new_generation;
+}
+pub fn de_best_iteration<T: Data<T> + Copy + Clone>(
+    training: &Vec<T>,
+    generation: &Vec<Chromosome>,
+    generation_size: usize,
+    n_attrs: usize,
+    rng: &mut StdRng,
+) -> Vec<Chromosome> {
+    let uniform = Uniform::new(0.0, 1.0);
+    let mut new_generation: Vec<Chromosome> = Vec::new();
+    let best = generation.last().unwrap();
+
+    for index in 0..generation_size {
+        let parents: Vec<Chromosome> = generation.choose_multiple(rng, 2).cloned().collect();
+        let mut offspring = vec![0.0; n_attrs];
+        for attr in 0..n_attrs {
+            if uniform.sample(rng) < 0.5 {
+                offspring[attr] = truncate(
+                    generation[index].weights[attr]
+                        + 0.5 * (best.weights[attr] - generation[index].weights[attr])
+                        + 0.5 * (parents[0].weights[attr] - parents[1].weights[attr]),
+                );
+            } else {
+                offspring[attr] = generation[index].weights[attr];
+            }
+        }
+        let mut new: Chromosome = Chromosome::new_w(&offspring);
+        fitness_function(training, &mut new);
+        new_generation.push(new);
+    }
+
+    return new_generation;
+}
+
+pub fn diferential_evolution<T: Data<T> + Clone + Copy>(
+    training: &Vec<T>,
+    n_attrs: usize,
+    generation_size: usize,
+    iteration: fn(&Vec<T>, &Vec<Chromosome>, usize, usize, &mut StdRng) -> Vec<Chromosome>,
+    rng: &mut StdRng,
+) -> Vec<f32> {
+    let mut generation: Vec<Chromosome> =
+        initial_generation(generation_size, n_attrs, training, rng)
+            .into_iter()
+            .collect();
+
+    let mut n_evaluations = generation_size;
+    loop {
+        // for a in generation.iter() {
+        //     println!("{}", a.result);
+        // }
+        // println!("\n");
+        // // println!(
+        //     "Iteration {} Best: {}",
+        //     n_evaluations,
+        //     generation.last().unwrap().result
+        // );
+        let new_generation = iteration(training, &generation, generation_size, n_attrs, rng);
+
+        for index in 0..generation_size {
+            if generation[index] < new_generation[index] {
+                generation[index] = new_generation[index].clone();
+            }
+        }
+
+        generation.sort();
+
+        n_evaluations += generation_size;
+        if n_evaluations >= 15000 {
+            break;
+        }
+    }
+
+    return generation.last().unwrap().weights.clone();
 }
 
 ///  Using the csv in `path`, prepares everything to call all the genetic algorithms.
@@ -1578,7 +1780,9 @@ pub fn run_p3<T: Data<T> + Clone + Copy>(
     }
 
     let do_es = false;
-    let do_ils = true;
+    let do_ils = false;
+    let do_de1 = false;
+    let do_de2 = true;
 
     let mut table_es = Table::new();
     table_es.add_row(row![
@@ -1589,6 +1793,8 @@ pub fn run_p3<T: Data<T> + Clone + Copy>(
         "Tiempo"
     ]);
     let mut table_ils = table_es.clone();
+    let mut table_de1 = table_es.clone();
+    let mut table_de2 = table_es.clone();
 
     let data: Vec<Vec<T>> = make_partitions(&data, 5);
     for i in 0..folds {
@@ -1641,15 +1847,59 @@ pub fn run_p3<T: Data<T> + Clone + Copy>(
                 now.elapsed().as_millis()
             ]);
         }
+
+        if do_de1 {
+            let now = Instant::now();
+            let res = classifier_1nn(
+                &knowledge,
+                &exam,
+                &diferential_evolution(&knowledge, n_attrs, 50, de_rand_iteration, rng),
+                true,
+            );
+
+            table_de1.add_row(row![
+                i,
+                res.success_percentage(),
+                res.reduction_rate(),
+                res.evaluation_function(),
+                now.elapsed().as_millis()
+            ]);
+        }
+
+        if do_de2 {
+            let now = Instant::now();
+            let res = classifier_1nn(
+                &knowledge,
+                &exam,
+                &diferential_evolution(&knowledge, n_attrs, 50, de_best_iteration, rng),
+                true,
+            );
+
+            table_de2.add_row(row![
+                i,
+                res.success_percentage(),
+                res.reduction_rate(),
+                res.evaluation_function(),
+                now.elapsed().as_millis()
+            ]);
+        }
     }
 
     if do_es {
-        println!("Generacional con cruce aritmetico");
+        println!("ES");
         table_es.printstd();
     }
     if do_ils {
-        println!("Generacional con cruce aritmetico");
+        println!("ILS");
         table_ils.printstd();
+    }
+    if do_de1 {
+        println!("DE1");
+        table_de1.printstd();
+    }
+    if do_de2 {
+        println!("DE2");
+        table_de2.printstd();
     }
 
     Ok(())
@@ -1664,13 +1914,13 @@ fn main() {
     let mut rng: StdRng = SeedableRng::seed_from_u64(seed);
 
     let do_texture = true;
-    let do_colpos = true;
-    let do_iono = true;
+    let do_colpos = false;
+    let do_iono = false;
 
     println!("# Current Results.");
     if do_texture {
         println!("## Results for Texture.\n");
-        if let Err(err) = run_p1::<Texture>(String::from("data/texture.csv"), 40, 5, &mut rng) {
+        if let Err(err) = run_p3::<Texture>(String::from("data/texture.csv"), 40, 5, &mut rng) {
             println!("Error running Texture: {}", err);
             std::process::exit(1);
         }
@@ -1678,7 +1928,7 @@ fn main() {
 
     if do_colpos {
         println!("## Results for Colposcopy.\n");
-        if let Err(err) = run_p2::<Colposcopy>(String::from("data/colposcopy.csv"), 62, 5, &mut rng)
+        if let Err(err) = run_p3::<Colposcopy>(String::from("data/colposcopy.csv"), 62, 5, &mut rng)
         {
             println!("Error running Colposcopy: {}", err);
             std::process::exit(1);
@@ -1687,7 +1937,7 @@ fn main() {
 
     if do_iono {
         println!("## Results for Ionosphere.\n");
-        if let Err(err) = run_p2::<Ionosphere>(String::from("data/ionosphere.csv"), 34, 5, &mut rng)
+        if let Err(err) = run_p3::<Ionosphere>(String::from("data/ionosphere.csv"), 34, 5, &mut rng)
         {
             println!("Error running Ionosphere: {}", err);
             std::process::exit(1);

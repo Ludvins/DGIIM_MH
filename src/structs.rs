@@ -4,24 +4,26 @@ use std::fmt;
 #[derive(Clone)]
 pub struct Chromosome {
     pub weights: Vec<f32>,
-    pub result: Results,
+    pub result: f32,
 }
 
 impl Chromosome {
-    pub fn new(weights: &Vec<f32>, res: Results) -> Chromosome {
+    pub fn new(weights: &Vec<f32>, res: f32) -> Chromosome {
         Chromosome {
             weights: weights.clone(),
             result: res,
         }
     }
-
-    pub fn ev(&self) -> f32 {
-        return self.result.evaluation_function();
+    pub fn new_w(weighted: &Vec<f32>) -> Chromosome {
+        Chromosome {
+            weights: weighted.clone(),
+            result: -1.0,
+        }
     }
 }
 impl PartialEq for Chromosome {
     fn eq(&self, other: &Chromosome) -> bool {
-        return self.ev() == other.ev();
+        return self.result == other.result;
     }
 }
 impl Eq for Chromosome {}
@@ -34,10 +36,10 @@ impl PartialOrd for Chromosome {
 
 impl Ord for Chromosome {
     fn cmp(&self, other: &Chromosome) -> Ordering {
-        if self.ev() < other.ev() {
+        if self.result < other.result {
             return Ordering::Less;
         }
-        if self.ev() > other.ev() {
+        if self.result > other.result {
             return Ordering::Greater;
         }
         return Ordering::Equal;
