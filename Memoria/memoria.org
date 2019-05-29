@@ -12,7 +12,7 @@
 #+latex_header_extra: \input{setup}
 #+latex_header_extra: \input{classicthesis-config}
 #+latex_header: \input{macros}
-\newpage
+\clearpage
 * Notas sobre pseudocódigo.
 
 El lenguaje de programación utilizado en la práctica es ~Rust~, para el pseudocódigo utilizaré una versión simplificada de este. Por ejemplo la siguiente cabecera de función, acepta una referencia a un vector del tipo genérico ~T~, una referencia a un vector de flotantes y un booleano, además devuelve un elemento del tipo ~Results~.
@@ -53,7 +53,7 @@ $$
 
 Para cierto $\alpha \in [0,1]$, en nuestro caso $\alpha = 0.5$. 
 
-\newpage
+\clearpage
 * Descripción de la aplicación de los algoritmos (Práctica 1).
 
 En este apartado se describen las consideraciones, tipos y operaciones comunes a los algoritmos de la práctica.
@@ -150,7 +150,7 @@ if nearest_example.class == test.class {
 return new Results(weights, correct, exam.len);
 #+END_SRC
 
-\newpage
+\clearpage
 * Descripción de la aplicación de los algoritmos (Práctica 2)
 
 En esta sección como en la anterior describiré los operadores comunes a los algoritmos utilizados en la práctica 2, además de la estructura de datos utilizada para encapsular un cromosoma.
@@ -634,7 +634,7 @@ Cuando hemos terminado de recorrer el bucle y hemos sumado los atributos de todo
 
 #+END_SRC
 
-\newpage
+\clearpage
 * Descripción de los algoritmos considerados (Práctica 2).
 ** Algoritmo genético generacional
 
@@ -977,7 +977,7 @@ Luego hay 3 tablas más, correspondientes a los valores medios obtenidos por cad
 Un factor a tener en cuenta es que, al realizar varias llamadas a la búsqueda local, los resultados de la búsqueda local 2 dependen de si se ha realizado la búsqueda local 1, debido al generador de números aleatorios. Por ello los resultados que aparecen en las tablas son los correspondientes a las ejecuciones aisladas de cada una de ellas, si se ejecutan todas seguidas no saldrán los mismos resultados.
 
 Respecto a las tablas de la segunda práctica, se encuentran en el msimo formato que las de la primera apareciendo luego junto al resto  de algoritmos. El apartado de mutaciones aparecerá en blanco ya que al estar usandose la esperanza matemática no tiene sentido comparar las que realiza uno u otro.
-\newpage
+\clearpage
 
 ** Tablas detalladas por algoritmo (Práctica 1).
 *** 1-NN
@@ -1024,7 +1024,7 @@ Respecto a las tablas de la segunda práctica, se encuentran en el msimo formato
 |-------------+--------------------+----------------+-----------+-------------|
 #+TBLFM: @7$2=vmean(@2..@6)::@7$3=vmean(@2..@6)::@7$4=vmean(@2..@6)::@7$5=vmean(@2..@6)::@2$4=vmean($2..$3)::@3$4=vmean($2..$3)::@4$4=vmean($2..$3)::@5$4=vmean($2..$3)::@6$4=vmean($2..$3)
 
-\newpage
+\clearpage
 *** RELIEF descartando
 *Texture*
 |-------------+--------------------+----------------+-----------+-------------|
@@ -1067,7 +1067,7 @@ Respecto a las tablas de la segunda práctica, se encuentran en el msimo formato
 |-------------+--------------------+----------------+-----------+-------------|
 #+TBLFM: @7$2=vmean(@2..@6)::@7$3=vmean(@2..@6)::@7$4=vmean(@2..@6)::@7$5=vmean(@2..@6)::@2$4=vmean($2..$3)::@3$4=vmean($2..$3)::@4$4=vmean($2..$3)::@5$4=vmean($2..$3)::@6$4=vmean($2..$3)
 
-\newpage
+\clearpage
 *** RELIEF sin descartar
 *Texture*
 |-------------+--------------------+----------------+-----------+-------------|
@@ -1111,7 +1111,7 @@ Respecto a las tablas de la segunda práctica, se encuentran en el msimo formato
 |-------------+--------------------+----------------+-----------+-------------|
 #+TBLFM: @7$2=vmean(@2..@6)::@7$3=vmean(@2..@6)::@7$4=vmean(@2..@6)::@7$5=vmean(@2..@6)::@2$4=vmean($2..$3)::@3$4=vmean($2..$3)::@4$4=vmean($2..$3)::@5$4=vmean($2..$3)::@6$4=vmean($2..$3)
 
-\newpage
+\clearpage
 *** Alternativa greedy
 *Texture*
 |-------------+--------------------+----------------+-----------+------------|
@@ -1154,7 +1154,7 @@ Respecto a las tablas de la segunda práctica, se encuentran en el msimo formato
 |-------------+--------------------+----------------+-----------+-------------|
 #+TBLFM: @7$2=vmean(@2..@6)::@7$3=vmean(@2..@6)::@7$4=vmean(@2..@6)::@7$5=vmean(@2..@6)::@2$4=vmean($2..$3)::@3$4=vmean($2..$3)::@4$4=vmean($2..$3)::@5$4=vmean($2..$3)::@6$4=vmean($2..$3)
 
-\newpage
+\clearpage
 *** Búsqueda local
 *Texture*
 
@@ -1204,7 +1204,7 @@ Respecto a las tablas de la segunda práctica, se encuentran en el msimo formato
 #+TBLFM: @7$6=vmean(@2..@6)::@2$4=vmean($2..$3)::@3$4=vmean($2..$3)::@4$4=vmean($2..$3)::@5$4=vmean($2..$3)::@6$4=vmean($2..$3)::@7$2=vmean(@2..@6)::@7$3=vmean(@2..@6)::@7$4=vmean(@2..@6)::@7$5=vmean(@2..@6)
 
 
-\newpage
+\clearpage
 *** Búsqueda local con vector inicial de RELIEF
 *Texture*
 
@@ -1250,7 +1250,7 @@ Respecto a las tablas de la segunda práctica, se encuentran en el msimo formato
 | Media       |   85.19919 | 87.058823 | 86.129009 |      5152.6 |       62.6 |
 |-------------+------------+-----------+-----------+-------------+------------|
 #+TBLFM: @7$6=vmean(@2..@6)::@2$4=vmean($2..$3)::@3$4=vmean($2..$3)::@4$4=vmean($2..$3)::@5$4=vmean($2..$3)::@6$4=vmean($2..$3)::@7$2=vmean(@2..@6)::@7$3=vmean(@2..@6)::@7$4=vmean(@2..@6)::@7$5=vmean(@2..@6)
-\newpage
+\clearpage
 *** Búsqueda local con vector inicial de greedy.
 *Texture*
 |-------------+------------+-----------+-----------+-------------+------------|
@@ -1293,7 +1293,7 @@ Respecto a las tablas de la segunda práctica, se encuentran en el msimo formato
 | Media       |  87.166996 |  90.00000 | 88.583498 |      2342.6 |       11.6 |
 |-------------+------------+-----------+-----------+-------------+------------|
 #+TBLFM: @7$6=vmean(@2..@6)::@2$4=vmean($2..$3)::@3$4=vmean($2..$3)::@4$4=vmean($2..$3)::@5$4=vmean($2..$3)::@6$4=vmean($2..$3)::@7$2=vmean(@2..@6)::@7$3=vmean(@2..@6)::@7$4=vmean(@2..@6)::@7$5=vmean(@2..@6)
-\newpage
+\clearpage
 ** Tablas detalladas por algoritmo (Práctica 2). 
 *** Algoritmo genético generacional con cruce aritmético.
 *Texture*
@@ -1336,7 +1336,7 @@ Respecto a las tablas de la segunda práctica, se encuentran en el msimo formato
 | Media       |             86.623741 |         74.117647 | 80.370694 |       37919 |
 |-------------+-----------------------+-------------------+-----------+-------------|
 #+TBLFM: @7$6=vmean(@2..@6)::@2$4=vmean($2..$3)::@3$4=vmean($2..$3)::@4$4=vmean($2..$3)::@5$4=vmean($2..$3)::@6$4=vmean($2..$3)::@7$2=vmean(@2..@6)::@7$3=vmean(@2..@6)::@7$4=vmean(@2..@6)::@7$5=vmean(@2..@6)
-\newpage
+\clearpage
 *** Algoritmo genético generacional con cruce BLX.
 *Texture*
 |-------------+-----------------------+-------------------+-----------+-------------|
@@ -1378,7 +1378,7 @@ Respecto a las tablas de la segunda práctica, se encuentran en el msimo formato
 |-------------+-----------------------+-------------------+-----------+-------------|
 #+TBLFM: @7$6=vmean(@2..@6)::@2$4=vmean($2..$3)::@3$4=vmean($2..$3)::@4$4=vmean($2..$3)::@5$4=vmean($2..$3)::@6$4=vmean($2..$3)::@7$2=vmean(@2..@6)::@7$3=vmean(@2..@6)::@7$4=vmean(@2..@6)::@7$5=vmean(@2..@6)
 
-\newpage
+\clearpage
 *** Algoritmo genético estacionario con cruce aritmético.
 *Texture*
 |-------------+-----------------------+-------------------+-----------+-------------|
@@ -1420,7 +1420,7 @@ Respecto a las tablas de la segunda práctica, se encuentran en el msimo formato
 | Media       |             88.036218 |         71.176471 | 79.606344 |     35774.8 |
 |-------------+-----------------------+-------------------+-----------+-------------|
 #+TBLFM: @7$6=vmean(@2..@6)::@2$4=vmean($2..$3)::@3$4=vmean($2..$3)::@4$4=vmean($2..$3)::@5$4=vmean($2..$3)::@6$4=vmean($2..$3)::@7$2=vmean(@2..@6)::@7$3=vmean(@2..@6)::@7$4=vmean(@2..@6)::@7$5=vmean(@2..@6)
-\newpage
+\clearpage
 *** Algoritmo genético estacionario con cruce BLX.
 *Texture*
 |-------------+-----------------------+-------------------+-----------+-------------|
@@ -1461,7 +1461,7 @@ Respecto a las tablas de la segunda práctica, se encuentran en el msimo formato
 | Media       |             90.020119 |         81.764705 | 85.892413 |     31704.4 |
 |-------------+-----------------------+-------------------+-----------+-------------|
 #+TBLFM: @7$6=vmean(@2..@6)::@2$4=vmean($2..$3)::@3$4=vmean($2..$3)::@4$4=vmean($2..$3)::@5$4=vmean($2..$3)::@6$4=vmean($2..$3)::@7$2=vmean(@2..@6)::@7$3=vmean(@2..@6)::@7$4=vmean(@2..@6)::@7$5=vmean(@2..@6)
-\newpage
+\clearpage
 *** Algoritmo memético 1
 *Texture*
 |-------------+-----------------------+-------------------+-----------+-------------|
@@ -1502,7 +1502,7 @@ Respecto a las tablas de la segunda práctica, se encuentran en el msimo formato
 | Media       |             84.325956 |         89.411764 | 86.868861 |     30965.8 |
 |-------------+-----------------------+-------------------+-----------+-------------|
 #+TBLFM: @7$6=vmean(@2..@6)::@2$4=vmean($2..$3)::@3$4=vmean($2..$3)::@4$4=vmean($2..$3)::@5$4=vmean($2..$3)::@6$4=vmean($2..$3)::@7$2=vmean(@2..@6)::@7$3=vmean(@2..@6)::@7$4=vmean(@2..@6)::@7$5=vmean(@2..@6)
-\newpage
+\clearpage
 *** Algoritmo memético 1 con pesos iniciales retocados.
 *Texture*
 |-------------+-----------------------+-------------------+-----------+-------------|
@@ -1544,7 +1544,7 @@ Respecto a las tablas de la segunda práctica, se encuentran en el msimo formato
 |-------------+-----------------------+-------------------+-----------+-------------|
 #+TBLFM: @7$6=vmean(@2..@6)::@2$4=vmean($2..$3)::@3$4=vmean($2..$3)::@4$4=vmean($2..$3)::@5$4=vmean($2..$3)::@6$4=vmean($2..$3)::@7$2=vmean(@2..@6)::@7$3=vmean(@2..@6)::@7$4=vmean(@2..@6)::@7$5=vmean(@2..@6)
 
-\newpage
+\clearpage
 *** Algoritmo memético 2
 *Texture*
 |-------------+-----------------------+-------------------+-----------+-------------|
@@ -1585,7 +1585,7 @@ Respecto a las tablas de la segunda práctica, se encuentran en el msimo formato
 | Media       |             87.179075 |          88.82353 | 88.001303 |     29515.6 |
 |-------------+-----------------------+-------------------+-----------+-------------|
 #+TBLFM: @7$6=vmean(@2..@6)::@2$4=vmean($2..$3)::@3$4=vmean($2..$3)::@4$4=vmean($2..$3)::@5$4=vmean($2..$3)::@6$4=vmean($2..$3)::@7$2=vmean(@2..@6)::@7$3=vmean(@2..@6)::@7$4=vmean(@2..@6)::@7$5=vmean(@2..@6)
-\newpage
+\clearpage
 *** Algoritmo memético 3
 *Texture*
 |-------------+-----------------------+-------------------+-----------+-------------|
@@ -1627,7 +1627,7 @@ Respecto a las tablas de la segunda práctica, se encuentran en el msimo formato
 |-------------+-----------------------+-------------------+-----------+-------------|
 #+TBLFM: @7$6=vmean(@2..@6)::@2$4=vmean($2..$3)::@3$4=vmean($2..$3)::@4$4=vmean($2..$3)::@5$4=vmean($2..$3)::@6$4=vmean($2..$3)::@7$2=vmean(@2..@6)::@7$3=vmean(@2..@6)::@7$4=vmean(@2..@6)::@7$5=vmean(@2..@6)
 
-\newpage
+\clearpage
 *** Algoritmo memético 3 con pesos iniciales retocados
 *Texture*
 |-------------+-----------------------+-------------------+-----------+-------------|
@@ -1670,7 +1670,7 @@ Respecto a las tablas de la segunda práctica, se encuentran en el msimo formato
 |-------------+-----------------------+-------------------+-----------+-------------|
 #+TBLFM: @7$6=vmean(@2..@6)::@2$4=vmean($2..$3)::@3$4=vmean($2..$3)::@4$4=vmean($2..$3)::@5$4=vmean($2..$3)::@6$4=vmean($2..$3)::@7$2=vmean(@2..@6)::@7$3=vmean(@2..@6)::@7$4=vmean(@2..@6)::@7$5=vmean(@2..@6)
 
-\newpage
+\clearpage
 ** Tablas detalladas por algoritmo (Práctica 3).
 *** Enfriamiento Simulado
 *Texture*
@@ -1715,7 +1715,7 @@ Respecto a las tablas de la segunda práctica, se encuentran en el msimo formato
 |-----------+-----------------------+-------------------+-----------+-------------|
 #+TBLFM: @7$6=vmean(@2..@6)::@2$4=vmean($2..$3)::@3$4=vmean($2..$3)::@4$4=vmean($2..$3)::@5$4=vmean($2..$3)::@6$4=vmean($2..$3)::@7$2=vmean(@2..@6)::@7$3=vmean(@2..@6)::@7$4=vmean(@2..@6)::@7$5=vmean(@2..@6)
 
-\newpage
+\clearpage
 *** Iterative Local Search
 *Texture*
 |-----------+-----------------------+-------------------+-----------+-------------|
@@ -1755,11 +1755,11 @@ Respecto a las tablas de la segunda práctica, se encuentran en el msimo formato
 |         3 |             95.714283 |         88.235295 | 91.974789 |       27057 |
 |         4 |             87.142855 |         91.176470 | 89.159663 |       28079 |
 |-----------+-----------------------+-------------------+-----------+-------------|
-|     Media |             87.183097 |         90.000000 | 88.591549 |     26772.4 |
+|     Media |             87.183097 |              90.0 | 88.591549 |     26772.4 |
 |-----------+-----------------------+-------------------+-----------+-------------|
 #+TBLFM: @7$6=vmean(@2..@6)::@2$4=vmean($2..$3)::@3$4=vmean($2..$3)::@4$4=vmean($2..$3)::@5$4=vmean($2..$3)::@6$4=vmean($2..$3)::@7$2=vmean(@2..@6)::@7$3=vmean(@2..@6)::@7$4=vmean(@2..@6)::@7$5=vmean(@2..@6)
 
-\newpage
+\clearpage
 *** Evolución Diferencial 1
 *Texture*
 |-----------+-----------------------+-------------------+-----------+-------------|
@@ -1771,7 +1771,7 @@ Respecto a las tablas de la segunda práctica, se encuentran en el msimo formato
 |         3 |             85.454550 |              87.5 | 86.477275 |       98191 |
 |         4 |             93.636364 |              87.5 | 90.568182 |       91191 |
 |-----------+-----------------------+-------------------+-----------+-------------|
-|     Media |             88.727275 |              88.0 | 88.363637 |     95754.2 |
+|     Media |             88.727275 |               88. | 88.363637 |     95754.2 |
 |-----------+-----------------------+-------------------+-----------+-------------|
 #+TBLFM: @7$6=vmean(@2..@6)::@2$4=vmean($2..$3)::@3$4=vmean($2..$3)::@4$4=vmean($2..$3)::@5$4=vmean($2..$3)::@6$4=vmean($2..$3)::@7$2=vmean(@2..@6)::@7$3=vmean(@2..@6)::@7$4=vmean(@2..@6)::@7$5=vmean(@2..@6)
 
@@ -1803,7 +1803,7 @@ Respecto a las tablas de la segunda práctica, se encuentran en el msimo formato
 |-----------+-----------------------+-------------------+-----------+-------------|
 #+TBLFM: @7$6=vmean(@2..@6)::@2$4=vmean($2..$3)::@3$4=vmean($2..$3)::@4$4=vmean($2..$3)::@5$4=vmean($2..$3)::@6$4=vmean($2..$3)::@7$2=vmean(@2..@6)::@7$3=vmean(@2..@6)::@7$4=vmean(@2..@6)::@7$5=vmean(@2..@6)
 
-\newpage
+\clearpage
 *** Evolución Diferencial 2
 *Texture*
 |-----------+-----------------------+-------------------+-----------+-------------|
@@ -1846,7 +1846,7 @@ Respecto a las tablas de la segunda práctica, se encuentran en el msimo formato
 |     Media |            0.89158954 |        0.83529409 | 0.86344182 |     31847.4 |
 |-----------+-----------------------+-------------------+------------+-------------|
 #+TBLFM: @7$6=vmean(@2..@6)::@2$4=vmean($2..$3)::@3$4=vmean($2..$3)::@4$4=vmean($2..$3)::@5$4=vmean($2..$3)::@6$4=vmean($2..$3)::@7$2=vmean(@2..@6)::@7$3=vmean(@2..@6)::@7$4=vmean(@2..@6)::@7$5=vmean(@2..@6)
-\newpage
+\clearpage
 ** Tablas generales por conjunto de datos.
 *** Texture 
 |------------------+-------------+-----------+-------------+-------------+------------|
@@ -1912,7 +1912,7 @@ Respecto a las tablas de la segunda práctica, se encuentran en el msimo formato
 | Memético 3 2     |   85.484908 |   90.588235 |   88.035720 |       29601 | -          |
 |------------------+-------------+-------------+-------------+-------------+------------|
 
-\newpage
+\clearpage
 ** Analisis de los resultados (Práctica 1)
 
 Comenzamos primero con el *clasificador 1-NN*, todos los vectores de pesos son 1, por lo que su tasa de reducción es mínima, aun así, la tasa de clasificación en el mejor caso, /Texture/, es de un $92.5\%$ de media, la cual está a la altura del resto de algoritmos, incluso quedando por encima de la búsqueda local. Sin embargo, en el conjunto de datos /Colposcopy/, la tasa de clasificación es de un $75.2\%$, aunque debemos tener en cuenta que el algoritmo con mejor tasa de clasificación en este conjunto ha obtenido $76.3\%$. De forma que vemos que la clasificación es bastante buena. Debido a su tasa de reducción, el agregado no es muy alto, siendo siempre el mas bajo de todos los algoritmos. Los tiempos de ejecución vemos que son de $1ms$ en el conjunto de datos mas grande y menos de esto en el resto de conjuntos.
