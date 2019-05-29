@@ -1492,8 +1492,6 @@ pub fn run_p2<T: Data<T> + Clone + Copy>(
 /////////////////////////////////////////////////////////////////////////////////////////////////
 
 pub fn metrop(diff: f32, t: f32, rng: &mut StdRng) -> bool {
-    //TODO aqui hay una k
-
     let mut difference = diff;
     if diff == 0.0 {
         difference = 0.005;
@@ -1537,10 +1535,10 @@ pub fn annealing<T: Data<T> + Clone + Copy>(
     'outer: loop {
         let mut n_success = 0;
         for _ in 0..max_neighbours {
-            // println!(
-            // "Valor: {}\nTemperatura: {}\nTemperatura final: {}\nNúmero de exitos: {}\nNúmero llamadas a la funcion de evaluación: {}",
-            // best_cost, temp, final_temp, n_success, n_calls_to_ev
-            // );
+            println!(
+            "Valor: {}\nTemperatura: {}\nTemperatura final: {}\nNúmero de exitos: {}\nNúmero llamadas a la funcion de evaluación: {}",
+            best_cost, temp, final_temp, n_success, n_calls_to_ev
+            );
             let mut neighbour = actual_solution.clone();
             // NOTE Misma mutación que en las otras practicas.
             mutate_weights(&mut neighbour, 0.3, rng.gen_range(0, n_attrs), rng);
@@ -1712,11 +1710,16 @@ pub fn diferential_evolution<T: Data<T> + Clone + Copy>(
 
     let mut n_evaluations = generation_size;
     loop {
+        // println!(
+        //     "Peor: {}\nMejor: {}",
+        //     generation.first().unwrap().result,
+        //     generation.last().unwrap().result
+        // );
         // for a in generation.iter() {
         //     println!("{}", a.result);
         // }
         // println!("\n");
-        // // println!(
+        // println!(
         //     "Iteration {} Best: {}",
         //     n_evaluations,
         //     generation.last().unwrap().result
@@ -1810,14 +1813,7 @@ pub fn run_p3<T: Data<T> + Clone + Copy>(
             let res = classifier_1nn(
                 &knowledge,
                 &exam,
-                &annealing(
-                    n_attrs,
-                    &knowledge,
-                    10 * knowledge.len(),
-                    (knowledge.len() as f32) as usize,
-                    1,
-                    rng,
-                ),
+                &annealing(n_attrs, &knowledge, 10 * n_attrs, n_attrs as usize, 1, rng),
                 true,
             );
 
@@ -1913,9 +1909,9 @@ fn main() {
     }
     let mut rng: StdRng = SeedableRng::seed_from_u64(seed);
 
-    let do_texture = true;
+    let do_texture = false;
     let do_colpos = false;
-    let do_iono = false;
+    let do_iono = true;
 
     println!("# Current Results.");
     if do_texture {
