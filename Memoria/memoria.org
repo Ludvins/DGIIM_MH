@@ -1,8 +1,8 @@
 #+TITLE: Aprendizaje de Pesos en Características
-#+SUBTITLE: Metaheurísticas: Práctica 3 @@latex: \\@@ Titulo @@latex: \\@@ Grupo 1 @@latex: \\@@M:17.30-19.30
+#+SUBTITLE: Metaheurísticas: Práctica 3 @@latex: \\@@ Enfriamiento Simulado, Búsqueda Local Reiterada  y Evolución Diferencial@@latex: \\@@ Grupo 1 @@latex: \\@@M:17.30-19.30
 #+LANGUAGE: es
 #+AUTHOR: Luis Antonio Ortega Andrés @@latex: \\@@76425628D @@latex: \\@@ ludvins@correo.ugr.es
-#+OPTIONS: toc:t num:3
+#+OPTIONS: toc:t num:2
 
 #+latex_class_options: [oneside,openright,titlepage,numbers=noenddot,openany,headinclude,footinclude=true,cleardoublepage=empty,abstractoff,BCOR=5mm,paper=a4,fontsize=12pt,ngerman,american]
 #+latex_header_extra: \usepackage[T1]{fontenc}
@@ -388,6 +388,11 @@ Por ello lo que hacemos es caparlo a la hora de insertarlo.
         children.push(weights1);
         children.push(weights2);
 #+END_SRC
+
+* Descripción de la aplicación de los algoritmos (Práctica 3)
+
+Durante esta práctica no ha sido necesario crear ninguna estructura de datos adicional, ya que sólo se han utilizado vectores de pesos y cromosomas.
+La función objetivo, los generadores de poblaciones y las mutaciones se hacen de la misma forma que se han hecho a lo largo de todas las prácticas.
 
 * Descripción de los algoritmos considerados (Práctica 1).
 ** Algoritmo greedy RELIEF.
@@ -952,6 +957,276 @@ Si el tipo es ~3~, se llama sobre el 10% final de la generación (los 10% mejore
         generation.sort();
 #+END_SRC
 
+* Descripción de los algoritmos considerados (Práctica 3)
+** Enfriamiento simulado
+
+Este algoritmo esta basado en una técnica de templado, esta última se basa en utilizar calor y enfriamientos controlados para aumentar el tamaño de los cristales de un material, eliminando así sus defectos.
+
+Dado que el algoritmo esta diseñado para minimizar una función objetivo, voy a realizar un pequeño cambio en el calculo del coste. Durante todo este algoritmo el valor de un vector de pesos sera igual a ~1 - fitness~, de forma que buscamos minimizar este valor.
+Lo primero que hacemos en el algoritmo es inicalizar el vector de pesos, en este caso de forma aleatoria, luego calculamos su coste.
+
+#+BEGIN_SRC rust
+fn annealing(
+    n_attrs: u8,
+    training: Vec<Data>,
+    max_neighbours: u8,
+    max_success: u8,
+    cooling_type: u8,
+    rng: StdRng,
+) -> Vec<f32> {
+    let mut best_solution = [0.0; n_attrs];
+    //let mut best_solution = alter_greedy_weights(training, n_attrs);
+
+    let uniform = new Uniform(0.0, 1.0);
+    for attr in 0..n_attrs {
+        best_solution[attr] += uniform.sample(rng);
+    }
+    best_cost =
+        1.0 - classifier_1nn(training, training, best_solution).evaluation_function();
+    actual_solution = best_solution.clone();
+    actual_cost = best_cost;
+#+END_SRC
+
+Luego inicializamos los valores de la temperatura inicial y la final. En caso de que los cálculos resulten en una temperatura final mas elevada que la inicial, cambiamos la final por un milésima parte de la inicial (en el guión no se especificaba que hacer en este caso y me ha parecido un valor razonable).
+Para calcular la inicial utilizamos la fórmula que se nos ha dado en el guión de prácticas.
+#+BEGIN_SRC rust
+    initial_temp = 0.3 * actual_cost / (-1 * (0.3).ln());
+    temp = initial_temp;
+    final_temp = 0.001;
+    if final_temp >= initial_temp {
+        final_temp = initial_temp / 1000.0;
+    }
+#+END_SRC 
+
+La estructura del algoritmo esta compuesta de dos bucles anidados, uno exterior que nos controla el criterio de parada (vuelven a ser 15000 llamadas a la función de evaluación) y uno interior que nos regulará el número de enfriamientos.
+
+Para las iteraciones del bucle interior tenemos dos contadores, el número de vecinos y el número de vecinos aceptados, ambos tienen un valor máximo que de ser alcanzado el bucle termina.
+
+En cada iteración de bucle interno comprobamos el número de llamadas a la función de evaluación y si el número de vecinos aceptados es mayor que la cota. Además, al acabar bucle interno se comprueba si el número de vecinos aceptados es 0, es decir, en todas las iteraciones del bucle interno no se ha aceptado ningún vecino, en ese caso el algoritmo termina (luego veremos que esto no se ha dado ninguna vez y la razón), cuando si se ha aceptado algún vecino se produce el enfriamiento de la temperatura, en mi caso si en el parámetro correspondiente se le pasa un 1, el enfriamiento se hace siguiente el esquema de Cauchy, en otro caso se realiza un enfriamiento proporcional.
+#+BEGIN_SRC rust
+      'outer: loop {
+          let mut n_success = 0;
+          for _ in 0..max_neighbours {
+              ....
+              ....
+              ....
+              if n_calls_to_ev >= 15000 {
+                  break 'outer; // NOTE break outer loop.
+              }
+              if n_success >= max_success {
+                  break;
+              }
+          } // NOTE END INNER LOOP
+          if n_success == 0 {
+              break;
+          }
+          match cooling_type {
+                1 => {
+                    let n_coolings = 15000 as f32 / max_neighbours as f32;
+                    let beta = (initial_temp - final_temp) / (initial_temp * final_temp * n_coolings);
+                    temp = temp / (1.0 + beta * temp);
+                }
+                _ => temp = 0.9 * temp,
+            }
+    }
+  return best_solution;
+#+END_SRC
+
+Veamos ahora como se realizan las mutaciones y el criterio de aceptación de un vecino. Calculamos el vecino haciendo una mutación en un peso aleatorio y calculamos su coste. El vecino será aceptado si pasa el criterio de metrópolis. En caso de ser mejor que la mejor solución actual, la cambiamos por este.
+
+#+BEGIN_SRC rust
+              neighbour = actual_solution.
+              // NOTE Misma mutación que en las otras practicas.
+              mutate_weights(neighbour, 0.3, rng.gen_range(0, n_attrs), rng);
+
+              let neighbour_cost =
+                  1.0 - classifier_1nn(training, training, &neighbour).evaluation_function();
+              n_calls_to_ev += 1;
+              dif = neighbour_cost - actual_cost;
+              if metrop(dif, temp, rng) {
+                  n_success += 1;
+                  actual_cost = neighbour_cost;
+                  actual_solution = neighbour.clone();
+
+                  if actual_cost < best_cost {
+                      best_cost = actual_cost;
+                      best_solution = neighbour;
+                  }
+              }
+#+END_SRC 
+
+Veamos ahora el criterio de metrópolis. El inconveniente que tiene el criterio es que en nuestro problema es muy común que un vecino tenga el mismo valor de la funcion fitness que el original, con lo cual la diferencia es 0 y eso hace que el vecino sea aceptado inmediatamente. Entonces el criterio de parada de ~n_success == 0~ no se cumple nunca y las iteraciones siempre terminan por el máximo número de vecinos aceptados, con lo cual el algoritmo enfría mas de lo que debería. Para solucionar esto vamos a poner una penalización a aquellos vecinos que tengan el mismo valor de la función fitness, esta penalización sera de 0.005, de esta forma el valor de la exponencial no será 1 y tampoco aceptaremos automáticamente todos los vecinos que tengan el mismo valor.
+
+#+BEGIN_SRC rust
+fn metrop(diff: f32, t: f32, rng: Rng) -> bool {
+    difference = diff;
+    if diff == 0.0 {
+        difference = 0.005;
+    }
+    uniform = new Uniform(0.0, 1.0);
+    random = uniform.sample(rng);
+    exp_value = (-1 * difference / t).exp();
+    return difference < 0.0 || random <= exp_value;
+}
+#+END_SRC
+
+** Búsqueda local reiterada.
+
+Este algoritmo esta basado en realizar una serie de llamadas a la búsqueda local sobre los vecinos de la mejor solución que tengamos, haremos un total de 14 vecinos y en cada uno de ellos llamaremos a la búsqueda local con 1000 llamadas a la función de evaluación. Esto junto con las primeras 1000 llamadas de ejecutar la búsqueda local a la solución inicial hacen las 15000 evaluaciones a la función de evaluación.
+
+Primero inicializamos el vector de pesos inicial de forma aleatoria y llamamos a la búsqueda local sobre este. La búsqueda local hará 999 evaluaciones que junto a la evaluación inicial hacen 1000.
+
+#+BEGIN_SRC rust
+pub fn iterated_local_search(
+    n_attrs: u8,
+    training: Vec<Data>,
+    rng: StdRng,
+) -> Vec<f32> {
+    best_weights: Vec<f32> = vec![0.0; n_attrs];
+
+    uniform = Uniform::new(0.0, 1.0);
+    for attr in 0..n_attrs {
+        best_weights[attr] += uniform.sample(rng);
+    }
+
+    //let mut best_weights: Vec<f32> = calculate_relief_weights(training, n_attrs);
+    best_results = classifier_1nn(training, training, &best_weights);
+    local_search(
+        training,
+        n_attrs,
+        best_weights,
+        best_results,
+        999,
+        rng,
+    );
+#+END_SRC
+
+Luego comenzamos el bucle con 14 iterationes, en cada una de ellas generamos un vecino donde mutamos el 10% de los pesos. Luego calculamos su resultado y llamamos a la búsqueda local sobre él. Luego comparamos si es mejor que el que teníamos antes.
+
+#+BEGIN_SRC rust
+    for _ in 0..14 {
+        muted_weights = best_weights;
+        indexes = (0..n_attrs).choose_multiple(n_attrs / 10);
+        for index in indexes {
+            mutate_weights(muted_weights, 0.4, index, rng);
+        }
+
+        muted_results = classifier_1nn(training, training, muted_weights);
+
+        local_search(
+            training,
+            n_attrs,
+            muted_weights,
+            muted_results,
+            999,
+            rng,
+        );
+
+        if muted_results.evaluation_function() >= best_results.evaluation_function() {
+            best_results = muted_results;
+            best_weights = muted_weights;
+        }
+    }
+
+    return best_weights;
+}
+#+END_SRC
+** Evolución Diferencial
+
+En este algoritmo volvemos a tener una población de vectores de pesos, para esto he reutilizado la estructura ~Chromosome~ de los algoritmos genéticos.
+
+El algoritmo acepta como parámetro la función encargada de calcular la nueva generación a partir de la actual, de esta forma aprovechamos que el bucle externo es el mismo para las dos variantes.
+En el algoritmo inicializamos la población inicial con vectores de pesos aleatorios siguiendo una distribución uniforme. 
+
+#+BEGIN_SRC rust
+  fn diferential_evolution(
+      training: Vec<Data>,
+      n_attrs: u8,
+      generation_size: u8,
+      iteration: fn(Vec<Data>, Vec<Chromosome>, u8, u8, StdRng) -> Vec<Chromosome>,
+      rng: StdRng,
+  ) -> Vec<f32> {
+      generation: Vec<Chromosome> =
+          initial_generation(generation_size, n_attrs, training, rng);
+      let mut n_evaluations = generation_size;
+      generation.sort();
+      loop {
+       ...
+      }
+      return generation.last().weights;
+#+END_SRC 
+
+En cada iteración calculamos la nueva generación a partir de la actual y sustituimos aquellos que hayan mejorado.
+
+#+BEGIN_SRC rust
+        new_generation = iteration(training, &generation, generation_size, n_attrs, rng);
+
+        for index in 0..generation_size {
+            if generation[index] < new_generation[index] {
+                generation[index] = new_generation[index];
+            }
+        }
+#+END_SRC
+Luego ordenamos la población por comodidad y actualizamos el número de llamadas a la función de evaluación.
+
+#+BEGIN_SRC rust
+        generation.sort();
+
+        n_evaluations += generation_size;
+        if n_evaluations >= 15000 {
+            break;
+        }
+
+#+END_SRC
+
+Las variantes del algoritmo solo se diferencian en un cálculo concreto, veamos mientras lo que tienen en común.
+
+En ambas inicializamos el generador de número de la distribución uniforme y una nueva población que vamos a rellenar.
+#+BEGIN_SRC rust
+    uniform = new Uniform(0.0, 1.0);
+    new_generation = new Vec<Chromosome>;
+#+END_SRC
+
+Luego crearemos tantos individuos como los que tenga la generación actual teniendo en cuenta la posicion en la que insertamos. Seleccionaremos un número concreto de padres aleatoriamente (en el caso de la variante aleatoria seleccionaremos 3 y en la otra variante seleccionaremos solo 2) de forma mutuamente excluyente entre ellos y el elemento de la generación en dicha posicion. Luego utilizaremos esos padres para asignarle un valor a cada uno de los pesos del nuevo individuo, este valor tendrá un 50% de probabilidad de ser el mismo que el tiene el individuo de la población original que ocupe esa misma posición, en caso contrario el valor que tome dependerá de la variante. Además en cada elemento de la población se selecciona un atributo que mutará de forma obligatoria.
+
+#+BEGIN_SRC rust
+  for index in 0..generation_size {
+          let mut possible_parents = generation.clone();
+          possible_parents.remove(index);
+          let parents = possible_parents.choose_multiple(rng, 3);
+
+          let mut offspring = vec![0.0; n_attrs];
+          let random_gene = rng.gen_range(0, n_attrs);
+          for attr in 0..n_attrs {
+              if uniform.sample(rng) < 0.5 || attr == random_gene {
+                ...
+              } else {
+                  offspring[attr] = generation[index].weights[attr];
+              }
+          }
+          let mut new: Chromosome = Chromosome::new_w(&offspring);
+          fitness_function(training, &mut new);
+          new_generation.push(new);
+      }
+#+END_SRC
+
+En la variante aleatoria será una suma ponderada de los valores de los 3 padres.
+#+BEGIN_SRC rust
+                offspring[attr] = truncate(
+                    parents[0].weights[attr]
+                        + 0.5 * (parents[1].weights[attr] - parents[2].weights[attr]),
+                );
+#+END_SRC
+
+En el caso de la variante de "el mejor" utilizamos el valor que tenga el mejor cromosoma de la población en dicho peso y los dos padres seleccionados.
+
+#+BEGIN_SRC rust
+               offspring[attr] = truncate(
+                    generation[index].weights[attr]
+                        + 0.5 * (best.weights[attr] - generation[index].weights[attr])
+                        + 0.5 * (parents[0].weights[attr] - parents[1].weights[attr]),
+#+END_SRC
+
 * Procedimiento considerado para desarrollar la práctica.
 
 Como ya he explicado en las notas sobre el psudocódigo, a implementación se ha hecho en el lenguaje de programación ~Rust~. Todo el código necesario para ejecutar el programa se encuentra en el directorio. ~Rust~ dispone de una herramienta gestora de paquetes ~Cargo~, es posible ejecutar el programa sin utilizarla pero no se recomienda.
@@ -976,9 +1251,12 @@ Luego hay 3 tablas más, correspondientes a los valores medios obtenidos por cad
 
 Un factor a tener en cuenta es que, al realizar varias llamadas a la búsqueda local, los resultados de la búsqueda local 2 dependen de si se ha realizado la búsqueda local 1, debido al generador de números aleatorios. Por ello los resultados que aparecen en las tablas son los correspondientes a las ejecuciones aisladas de cada una de ellas, si se ejecutan todas seguidas no saldrán los mismos resultados.
 
-Respecto a las tablas de la segunda práctica, se encuentran en el msimo formato que las de la primera apareciendo luego junto al resto  de algoritmos. El apartado de mutaciones aparecerá en blanco ya que al estar usandose la esperanza matemática no tiene sentido comparar las que realiza uno u otro.
-\clearpage
+Respecto a las tablas de la segunda práctica, se encuentran en el mismo formato que las de la primera apareciendo luego junto al resto  de algoritmos. El apartado de mutaciones aparecerá en blanco ya que al estar usandose la esperanza matemática no tiene sentido comparar las que realiza uno u otro. En los meméticos se ha añadido una ejecución con los pesos "retocados" consistente en añadir los vectores de los algoritmos greedy a la población inicial.
 
+En la tercera práctica se ha seguido utilizando el mismo formato donde existen ciertas variantes de cada uno de los algoritmos, en enfriamiento simulado he probado a iniciar el algoritmo con el vector de pesos que devuelve RELIEF y en ILS con el vector de pesos del algoritmo greedy.
+Respecto a la evolución diferencial he probado a insertar en la población inicial un vector de pesos de RELIEF en la versión de "el mejor" para aprovechar mejor su funcionalidad (ya veremos que sin hacerlo los resultados no son buenos).
+
+\clearpage
 ** Tablas detalladas por algoritmo (Práctica 1).
 *** 1-NN
  *Texture*
@@ -1674,104 +1952,194 @@ Respecto a las tablas de la segunda práctica, se encuentran en el msimo formato
 ** Tablas detalladas por algoritmo (Práctica 3).
 *** Enfriamiento Simulado
 *Texture*
-|-----------+-----------------------+-------------------+-----------+-------------|
-| Partición | Tasa de clasificación | Tasa de reducción |  Agregado | Tiempo (ms) |
-|-----------+-----------------------+-------------------+-----------+-------------|
-|         0 |             90.000000 |              87.5 | 88.750000 |       58039 |
-|         1 |             88.181820 |              87.5 | 87.840910 |       82668 |
-|         2 |             90.000000 |              87.5 | 88.750000 |       83469 |
-|         3 |             89.090910 |              87.5 | 88.295455 |       82597 |
-|         4 |             90.909094 |              85.0 | 87.954547 |       83268 |
-|-----------+-----------------------+-------------------+-----------+-------------|
-|     Media |             89.636365 |              87.0 | 88.318182 |     78008.2 |
-|-----------+-----------------------+-------------------+-----------+-------------|
+|-------------+-----------------------+-------------------+-----------+-------------|
+| Partición   | Tasa de clasificación | Tasa de reducción |  Agregado | Tiempo (ms) |
+|-------------+-----------------------+-------------------+-----------+-------------|
+| Partición 0 |             90.000000 |              87.5 | 88.750000 |       81039 |
+| Partición 1 |             88.181820 |              87.5 | 87.840910 |       82668 |
+| Partición 2 |             90.000000 |              87.5 | 88.750000 |       83469 |
+| Partición 3 |             89.090910 |              87.5 | 88.295455 |       82597 |
+| Partición 4 |             90.909094 |              85.0 | 87.954547 |       83268 |
+|-------------+-----------------------+-------------------+-----------+-------------|
+| Media       |             89.636365 |              87.0 | 88.318182 |     82608.2 |
+|-------------+-----------------------+-------------------+-----------+-------------|
 #+TBLFM: @7$6=vmean(@2..@6)::@2$4=vmean($2..$3)::@3$4=vmean($2..$3)::@4$4=vmean($2..$3)::@5$4=vmean($2..$3)::@6$4=vmean($2..$3)::@7$2=vmean(@2..@6)::@7$3=vmean(@2..@6)::@7$4=vmean(@2..@6)::@7$5=vmean(@2..@6)
 
 *Colposcopy*
-|-----------+-----------------------+-------------------+-----------+-------------|
-| Partición | Tasa de clasificación | Tasa de reducción |  Agregado | Tiempo (ms) |
-|-----------+-----------------------+-------------------+-----------+-------------|
-|         0 |             74.576270 |         90.322580 | 82.449425 |       38279 |
-|         1 |             70.175440 |         87.096775 | 78.636108 |       44575 |
-|         2 |             68.421054 |         83.870965 | 76.146010 |       40638 |
-|         3 |             71.929824 |         88.709676 | 80.319750 |       44362 |
-|         4 |             75.438595 |         87.096775 | 81.267685 |       41976 |
-|-----------+-----------------------+-------------------+-----------+-------------|
-|     Media |             72.108237 |         87.419354 | 79.763796 |       41966 |
-|-----------+-----------------------+-------------------+-----------+-------------|
+|-------------+-----------------------+-------------------+-----------+-------------|
+| Partición   | Tasa de clasificación | Tasa de reducción |  Agregado | Tiempo (ms) |
+|-------------+-----------------------+-------------------+-----------+-------------|
+| Partición 0 |             74.576270 |         90.322580 | 82.449425 |       38279 |
+| Partición 1 |             70.175440 |         87.096775 | 78.636108 |       44575 |
+| Partición 2 |             68.421054 |         83.870965 | 76.146010 |       40638 |
+| Partición 3 |             71.929824 |         88.709676 | 80.319750 |       44362 |
+| Partición 4 |             75.438595 |         87.096775 | 81.267685 |       41976 |
+|-------------+-----------------------+-------------------+-----------+-------------|
+| Media       |             72.108237 |         87.419354 | 79.763796 |       41966 |
+|-------------+-----------------------+-------------------+-----------+-------------|
 #+TBLFM: @7$6=vmean(@2..@6)::@2$4=vmean($2..$3)::@3$4=vmean($2..$3)::@4$4=vmean($2..$3)::@5$4=vmean($2..$3)::@6$4=vmean($2..$3)::@7$2=vmean(@2..@6)::@7$3=vmean(@2..@6)::@7$4=vmean(@2..@6)::@7$5=vmean(@2..@6)
 
 *Ionosphere*
-|-----------+-----------------------+-------------------+-----------+-------------|
-| Partición | Tasa de clasificación | Tasa de reducción |  Agregado | Tiempo (ms) |
-|-----------+-----------------------+-------------------+-----------+-------------|
-|         0 |             88.732390 |         91.176470 | 89.954430 |       24864 |
-|         1 |             81.428570 |         88.235295 | 84.831933 |       27357 |
-|         2 |             87.142855 |         91.176470 | 89.159663 |       26891 |
-|         3 |             94.285715 |         88.235295 | 91.260505 |       25478 |
-|         4 |             90.000000 |         88.235295 | 89.117648 |       28250 |
-|-----------+-----------------------+-------------------+-----------+-------------|
-|     Media |             88.317906 |         89.411765 | 88.864836 |       26568 |
-|-----------+-----------------------+-------------------+-----------+-------------|
+|-------------+-----------------------+-------------------+-----------+-------------|
+| Partición   | Tasa de clasificación | Tasa de reducción |  Agregado | Tiempo (ms) |
+|-------------+-----------------------+-------------------+-----------+-------------|
+| Partición 0 |             88.732390 |         91.176470 | 89.954430 |       24864 |
+| Partición 1 |             81.428570 |         88.235295 | 84.831933 |       27357 |
+| Partición 2 |             87.142855 |         91.176470 | 89.159663 |       26891 |
+| Partición 3 |             94.285715 |         88.235295 | 91.260505 |       25478 |
+| Partición 4 |             90.000000 |         88.235295 | 89.117648 |       28250 |
+|-------------+-----------------------+-------------------+-----------+-------------|
+| Media       |             88.317906 |         89.411765 | 88.864836 |       26568 |
+|-------------+-----------------------+-------------------+-----------+-------------|
 #+TBLFM: @7$6=vmean(@2..@6)::@2$4=vmean($2..$3)::@3$4=vmean($2..$3)::@4$4=vmean($2..$3)::@5$4=vmean($2..$3)::@6$4=vmean($2..$3)::@7$2=vmean(@2..@6)::@7$3=vmean(@2..@6)::@7$4=vmean(@2..@6)::@7$5=vmean(@2..@6)
 
 \clearpage
+*** Enfriamiento Simulado (Pesos iniciales RELIEF)
+*Texture*
+|-------------+-----------------------+-------------------+-----------+-------------|
+| Partición   | Tasa de clasificación | Tasa de reducción |  Agregado | Tiempo (ms) |
+|-------------+-----------------------+-------------------+-----------+-------------|
+| Partición 0 |             91.818184 |              87.5 | 89.659092 |       61500 |
+| Partición 1 |             90.000000 |              87.5 | 88.750000 |       88159 |
+| Partición 2 |             90.909094 |              87.5 | 89.204547 |       89628 |
+| Partición 3 |             91.818184 |              87.5 | 89.659092 |       85302 |
+| Partición 4 |             88.181820 |              85.0 | 86.590910 |       86951 |
+|-------------+-----------------------+-------------------+-----------+-------------|
+| Media       |             90.545456 |              87.0 | 88.772728 |       82308 |
+|-------------+-----------------------+-------------------+-----------+-------------|
+#+TBLFM: @7$6=vmean(@2..@6)::@2$4=vmean($2..$3)::@3$4=vmean($2..$3)::@4$4=vmean($2..$3)::@5$4=vmean($2..$3)::@6$4=vmean($2..$3)::@7$2=vmean(@2..@6)::@7$3=vmean(@2..@6)::@7$4=vmean(@2..@6)::@7$5=vmean(@2..@6)
+
+*Colposcopy*
+|-------------+-----------------------+-------------------+-----------+-------------|
+| Partición   | Tasa de clasificación | Tasa de reducción |  Agregado | Tiempo (ms) |
+|-------------+-----------------------+-------------------+-----------+-------------|
+| Partición 0 |             72.881360 |         88.709676 | 80.795518 |       33070 |
+| Partición 1 |             64.912283 |         90.322580 | 77.617432 |       32532 |
+| Partición 2 |             75.438595 |         85.483870 | 80.461233 |       37530 |
+| Partición 3 |             70.175440 |         88.709676 | 79.442558 |       37353 |
+| Partición 4 |             78.947370 |         88.709676 | 83.828523 |       43434 |
+|-------------+-----------------------+-------------------+-----------+-------------|
+| Media       |             72.471010 |         88.387096 | 80.429053 |     36783.8 |
+|-------------+-----------------------+-------------------+-----------+-------------|
+#+TBLFM: @7$6=vmean(@2..@6)::@2$4=vmean($2..$3)::@3$4=vmean($2..$3)::@4$4=vmean($2..$3)::@5$4=vmean($2..$3)::@6$4=vmean($2..$3)::@7$2=vmean(@2..@6)::@7$3=vmean(@2..@6)::@7$4=vmean(@2..@6)::@7$5=vmean(@2..@6)
+
+*Ionosphere*
+|-------------+-----------------------+-------------------+-----------+-------------|
+| Partición   | Tasa de clasificación | Tasa de reducción |  Agregado | Tiempo (ms) |
+|-------------+-----------------------+-------------------+-----------+-------------|
+| Partición 0 |             85.915494 |         88.235295 | 87.075395 |       28002 |
+| Partición 1 |             90.000000 |         91.176470 | 90.588235 |       26741 |
+| Partición 2 |             85.714287 |         88.235295 | 86.974791 |       26998 |
+| Partición 3 |             87.142855 |         91.176470 | 89.159663 |       33129 |
+| Partición 4 |             87.142855 |         91.176470 | 89.159663 |       24669 |
+|-------------+-----------------------+-------------------+-----------+-------------|
+| Media       |             87.183098 |         90.000000 | 88.591549 |     27907.8 |
+|-------------+-----------------------+-------------------+-----------+-------------|
+#+TBLFM: @7$6=vmean(@2..@6)::@2$4=vmean($2..$3)::@3$4=vmean($2..$3)::@4$4=vmean($2..$3)::@5$4=vmean($2..$3)::@6$4=vmean($2..$3)::@7$2=vmean(@2..@6)::@7$3=vmean(@2..@6)::@7$4=vmean(@2..@6)::@7$5=vmean(@2..@6)
+
+\clearpage
+
 *** Iterative Local Search
 *Texture*
-|-----------+-----------------------+-------------------+-----------+-------------|
-| Partición | Tasa de clasificación | Tasa de reducción |  Agregado | Tiempo (ms) |
-|-----------+-----------------------+-------------------+-----------+-------------|
-|         0 |             87.272730 |              85.0 | 86.136365 |       86745 |
-|         1 |             88.181820 |              87.5 | 87.840910 |       86350 |
-|         2 |             87.272727 |              87.5 | 87.386364 |       90772 |
-|         3 |             90.909094 |              87.5 | 89.204547 |       88256 |
-|         4 |             90.000000 |              87.5 | 88.750000 |       88302 |
-|-----------+-----------------------+-------------------+-----------+-------------|
-|     Media |             88.727274 |              87.0 | 87.863637 |       88085 |
-|-----------+-----------------------+-------------------+-----------+-------------|
+|-------------+-----------------------+-------------------+-----------+-------------|
+| Partición   | Tasa de clasificación | Tasa de reducción |  Agregado | Tiempo (ms) |
+|-------------+-----------------------+-------------------+-----------+-------------|
+| Partición 0 |             87.272730 |              85.0 | 86.136365 |       86745 |
+| Partición 1 |             88.181820 |              87.5 | 87.840910 |       86350 |
+| Partición 2 |             87.272727 |              87.5 | 87.386364 |       90772 |
+| Partición 3 |             90.909094 |              87.5 | 89.204547 |       88256 |
+| Partición 4 |             90.000000 |              87.5 | 88.750000 |       88302 |
+|-------------+-----------------------+-------------------+-----------+-------------|
+| Media       |             88.727274 |              87.0 | 87.863637 |       88085 |
+|-------------+-----------------------+-------------------+-----------+-------------|
 #+TBLFM: @7$6=vmean(@2..@6)::@2$4=vmean($2..$3)::@3$4=vmean($2..$3)::@4$4=vmean($2..$3)::@5$4=vmean($2..$3)::@6$4=vmean($2..$3)::@7$2=vmean(@2..@6)::@7$3=vmean(@2..@6)::@7$4=vmean(@2..@6)::@7$5=vmean(@2..@6)
 
 *Colposcopy*
-|-----------+-----------------------+-------------------+-----------+-------------|
-| Partición | Tasa de clasificación | Tasa de reducción |  Agregado | Tiempo (ms) |
-|-----------+-----------------------+-------------------+-----------+-------------|
-|         0 |             76.271190 |         83.870965 | 80.071078 |       36873 |
-|         1 |             73.684210 |         85.483870 | 79.584040 |       42682 |
-|         2 |             73.684210 |         88.709676 | 81.196943 |       41835 |
-|         3 |             71.929824 |         80.645160 | 76.287492 |       48716 |
-|         4 |             77.192980 |         83.870965 | 80.531973 |       42500 |
-|-----------+-----------------------+-------------------+-----------+-------------|
-|     Media |             74.552483 |         84.516127 | 79.534305 |     42521.2 |
-|-----------+-----------------------+-------------------+-----------+-------------|
+|-------------+-----------------------+-------------------+-----------+-------------|
+| Partición   | Tasa de clasificación | Tasa de reducción |  Agregado | Tiempo (ms) |
+|-------------+-----------------------+-------------------+-----------+-------------|
+| Partición 0 |             76.271190 |         83.870965 | 80.071078 |       36873 |
+| Partición 1 |             73.684210 |         85.483870 | 79.584040 |       42682 |
+| Partición 2 |             73.684210 |         88.709676 | 81.196943 |       41835 |
+| Partición 3 |             71.929824 |         80.645160 | 76.287492 |       48716 |
+| Partición 4 |             77.192980 |         83.870965 | 80.531973 |       42500 |
+|-------------+-----------------------+-------------------+-----------+-------------|
+| Media       |             74.552483 |         84.516127 | 79.534305 |     42521.2 |
+|-------------+-----------------------+-------------------+-----------+-------------|
 #+TBLFM: @7$6=vmean(@2..@6)::@2$4=vmean($2..$3)::@3$4=vmean($2..$3)::@4$4=vmean($2..$3)::@5$4=vmean($2..$3)::@6$4=vmean($2..$3)::@7$2=vmean(@2..@6)::@7$3=vmean(@2..@6)::@7$4=vmean(@2..@6)::@7$5=vmean(@2..@6)
 
 *Ionosphere*
-|-----------+-----------------------+-------------------+-----------+-------------|
-| Partición | Tasa de clasificación | Tasa de reducción |  Agregado | Tiempo (ms) |
-|-----------+-----------------------+-------------------+-----------+-------------|
-|         0 |             85.915494 |         91.176470 | 88.545982 |       25526 |
-|         1 |             82.857144 |         91.176470 | 87.016807 |       27449 |
-|         2 |             84.285710 |         88.235295 | 86.260503 |       25751 |
-|         3 |             95.714283 |         88.235295 | 91.974789 |       27057 |
-|         4 |             87.142855 |         91.176470 | 89.159663 |       28079 |
-|-----------+-----------------------+-------------------+-----------+-------------|
-|     Media |             87.183097 |              90.0 | 88.591549 |     26772.4 |
-|-----------+-----------------------+-------------------+-----------+-------------|
+|-------------+-----------------------+-------------------+-----------+-------------|
+| Partición   | Tasa de clasificación | Tasa de reducción |  Agregado | Tiempo (ms) |
+|-------------+-----------------------+-------------------+-----------+-------------|
+| Partición 0 |             85.915494 |         91.176470 | 88.545982 |       25526 |
+| Partición 1 |             82.857144 |         91.176470 | 87.016807 |       27449 |
+| Partición 2 |             84.285710 |         88.235295 | 86.260503 |       25751 |
+| Partición 3 |             95.714283 |         88.235295 | 91.974789 |       27057 |
+| Partición 4 |             87.142855 |         91.176470 | 89.159663 |       28079 |
+|-------------+-----------------------+-------------------+-----------+-------------|
+| Media       |             87.183097 |         90.000000 | 88.591549 |     26772.4 |
+|-------------+-----------------------+-------------------+-----------+-------------|
 #+TBLFM: @7$6=vmean(@2..@6)::@2$4=vmean($2..$3)::@3$4=vmean($2..$3)::@4$4=vmean($2..$3)::@5$4=vmean($2..$3)::@6$4=vmean($2..$3)::@7$2=vmean(@2..@6)::@7$3=vmean(@2..@6)::@7$4=vmean(@2..@6)::@7$5=vmean(@2..@6)
 
 \clearpage
+
+*** Iterative Local Search (Pesos iniciales Greedy)
+*Texture*
+|-------------+-----------------------+-------------------+-----------+-------------|
+| Partición   | Tasa de clasificación | Tasa de reducción |  Agregado | Tiempo (ms) |
+|-------------+-----------------------+-------------------+-----------+-------------|
+| Partición 0 |             87.272730 |              87.5 | 87.386365 |       75447 |
+| Partición 1 |             88.181820 |              87.5 |  87.84091 |       75491 |
+| Partición 2 |             91.818184 |              87.5 | 89.659092 |       77344 |
+| Partición 3 |             90.909094 |              87.5 | 89.204547 |       73853 |
+| Partición 4 |             90.000000 |              85.0 |      87.5 |       77444 |
+|-------------+-----------------------+-------------------+-----------+-------------|
+| Media       |             89.636366 |               87. | 88.318183 |     75915.8 |
+|-------------+-----------------------+-------------------+-----------+-------------|
+#+TBLFM: @7$6=vmean(@2..@6)::@2$4=vmean($2..$3)::@3$4=vmean($2..$3)::@4$4=vmean($2..$3)::@5$4=vmean($2..$3)::@6$4=vmean($2..$3)::@7$2=vmean(@2..@6)::@7$3=vmean(@2..@6)::@7$4=vmean(@2..@6)::@7$5=vmean(@2..@6)
+
+*Colposcopy*
+|-------------+-----------------------+-------------------+-----------+-------------|
+| Partición   | Tasa de clasificación | Tasa de reducción |  Agregado | Tiempo (ms) |
+|-------------+-----------------------+-------------------+-----------+-------------|
+| Partición 0 |             72.881360 |          93.54839 | 83.214875 |       34803 |
+| Partición 1 |             70.175440 |          93.54839 | 81.861915 |       32902 |
+| Partición 2 |             70.175440 |          93.54839 | 81.861915 |       34909 |
+| Partición 3 |             75.438595 |          90.32258 | 82.880588 |       33666 |
+| Partición 4 |             75.438595 |          90.32258 | 82.880588 |       32815 |
+|-------------+-----------------------+-------------------+-----------+-------------|
+| Media       |             72.821886 |         92.258066 | 82.539976 |       33819 |
+|-------------+-----------------------+-------------------+-----------+-------------|
+#+TBLFM: @7$6=vmean(@2..@6)::@2$4=vmean($2..$3)::@3$4=vmean($2..$3)::@4$4=vmean($2..$3)::@5$4=vmean($2..$3)::@6$4=vmean($2..$3)::@7$2=vmean(@2..@6)::@7$3=vmean(@2..@6)::@7$4=vmean(@2..@6)::@7$5=vmean(@2..@6)
+
+*Ionosphere*
+|-------------+-----------------------+-------------------+-----------+-------------|
+| Partición   | Tasa de clasificación | Tasa de reducción |  Agregado | Tiempo (ms) |
+|-------------+-----------------------+-------------------+-----------+-------------|
+| Partición 0 |             92.957747 |         88.235295 | 90.596521 |       23411 |
+| Partición 1 |             90.000000 |         91.176470 | 90.588235 |       21515 |
+| Partición 2 |             90.000000 |         91.176470 | 90.588235 |       24973 |
+| Partición 3 |             91.428570 |         91.176470 | 91.302520 |       22021 |
+| Partición 4 |             82.857144 |         91.176470 | 87.016807 |       21544 |
+|-------------+-----------------------+-------------------+-----------+-------------|
+| Media       |             89.448692 |         90.588235 | 90.018464 |     22692.8 |
+|-------------+-----------------------+-------------------+-----------+-------------|
+#+TBLFM: @7$6=vmean(@2..@6)::@2$4=vmean($2..$3)::@3$4=vmean($2..$3)::@4$4=vmean($2..$3)::@5$4=vmean($2..$3)::@6$4=vmean($2..$3)::@7$2=vmean(@2..@6)::@7$3=vmean(@2..@6)::@7$4=vmean(@2..@6)::@7$5=vmean(@2..@6)
+\clearpage
+
 *** Evolución Diferencial 1
 *Texture*
 |-----------+-----------------------+-------------------+-----------+-------------|
 | Partición | Tasa de clasificación | Tasa de reducción |  Agregado | Tiempo (ms) |
 |-----------+-----------------------+-------------------+-----------+-------------|
-|         0 |             89.090910 |              87.5 | 88.295455 |       93232 |
-|         1 |             89.090910 |              87.5 | 88.295455 |       99444 |
-|         2 |             86.363640 |              90.0 |  88.18182 |       96713 |
-|         3 |             85.454550 |              87.5 | 86.477275 |       98191 |
-|         4 |             93.636364 |              87.5 | 90.568182 |       91191 |
+|         0 |             91.818184 |              87.5 | 89.659092 |       84478 |
+|         1 |             89.090904 |              87.5 | 88.295452 |       87985 |
+|         2 |              96.36363 |              87.5 | 91.931815 |       84988 |
+|         3 |              86.36364 |              87.5 |  86.93182 |       86318 |
+|         4 |              93.63636 |              87.5 |  90.56818 |       85593 |
 |-----------+-----------------------+-------------------+-----------+-------------|
-|     Media |             88.727275 |               88. | 88.363637 |     95754.2 |
+|     Media |             91.454544 |              87.5 | 89.477272 |     85872.4 |
 |-----------+-----------------------+-------------------+-----------+-------------|
 #+TBLFM: @7$6=vmean(@2..@6)::@2$4=vmean($2..$3)::@3$4=vmean($2..$3)::@4$4=vmean($2..$3)::@5$4=vmean($2..$3)::@6$4=vmean($2..$3)::@7$2=vmean(@2..@6)::@7$3=vmean(@2..@6)::@7$4=vmean(@2..@6)::@7$5=vmean(@2..@6)
 
@@ -1779,13 +2147,13 @@ Respecto a las tablas de la segunda práctica, se encuentran en el msimo formato
 |-----------+-----------------------+-------------------+-----------+-------------|
 | Partición | Tasa de clasificación | Tasa de reducción |  Agregado | Tiempo (ms) |
 |-----------+-----------------------+-------------------+-----------+-------------|
-|         0 |             74.576270 |         95.161290 | 84.868780 |       41559 |
-|         1 |             70.175440 |         95.161290 | 82.668365 |       43632 |
-|         2 |             71.929824 |         95.161290 | 83.545557 |       48562 |
-|         3 |             70.175440 |         91.935486 | 81.055463 |       45881 |
-|         4 |             71.929824 |         93.548390 | 82.739107 |       42226 |
+|         0 |             67.796616 |         93.548386 | 80.672501 |       39170 |
+|         1 |              73.68421 |         95.161285 | 84.422748 |       38277 |
+|         2 |              80.70176 |         93.548386 | 87.125073 |       38282 |
+|         3 |              73.68421 |         93.548386 | 83.616298 |       38567 |
+|         4 |             71.929825 |         95.161285 | 83.545555 |       37567 |
 |-----------+-----------------------+-------------------+-----------+-------------|
-|     Media |             71.757360 |         94.193549 | 82.975454 |       44372 |
+|     Media |             73.559324 |         94.193546 | 83.876435 |     38372.6 |
 |-----------+-----------------------+-------------------+-----------+-------------|
 #+TBLFM: @7$6=vmean(@2..@6)::@2$4=vmean($2..$3)::@3$4=vmean($2..$3)::@4$4=vmean($2..$3)::@5$4=vmean($2..$3)::@6$4=vmean($2..$3)::@7$2=vmean(@2..@6)::@7$3=vmean(@2..@6)::@7$4=vmean(@2..@6)::@7$5=vmean(@2..@6)
 
@@ -1793,60 +2161,148 @@ Respecto a las tablas de la segunda práctica, se encuentran en el msimo formato
 |-----------+-----------------------+-------------------+-----------+-------------|
 | Partición | Tasa de clasificación | Tasa de reducción |  Agregado | Tiempo (ms) |
 |-----------+-----------------------+-------------------+-----------+-------------|
-|         0 |             83.098590 |          91.17647 | 87.137530 |       30877 |
-|         1 |             84.285710 |          91.17647 | 87.731090 |       34105 |
-|         2 |             84.285710 |          91.17647 | 87.731090 |       32814 |
-|         3 |             94.285715 |          94.11765 | 94.201683 |       34180 |
-|         4 |             80.000000 |          94.11765 | 87.058825 |       32113 |
+|         0 |              88.73239 |          91.17647 |  89.95443 |       29150 |
+|         1 |                    80 |          91.17647 | 85.588235 |       33259 |
+|         2 |              82.85715 |          91.17647 |  87.01681 |       30672 |
+|         3 |              95.71428 |          91.17647 | 93.445375 |       30090 |
+|         4 |              82.85715 |          91.17647 |  87.01681 |       29305 |
 |-----------+-----------------------+-------------------+-----------+-------------|
-|     Media |             85.191145 |         92.352942 | 88.772044 |     32817.8 |
+|     Media |             86.032194 |          91.17647 | 88.604332 |     30495.2 |
 |-----------+-----------------------+-------------------+-----------+-------------|
 #+TBLFM: @7$6=vmean(@2..@6)::@2$4=vmean($2..$3)::@3$4=vmean($2..$3)::@4$4=vmean($2..$3)::@5$4=vmean($2..$3)::@6$4=vmean($2..$3)::@7$2=vmean(@2..@6)::@7$3=vmean(@2..@6)::@7$4=vmean(@2..@6)::@7$5=vmean(@2..@6)
-
 \clearpage
 *** Evolución Diferencial 2
 *Texture*
 |-----------+-----------------------+-------------------+-----------+-------------|
 | Partición | Tasa de clasificación | Tasa de reducción |  Agregado | Tiempo (ms) |
 |-----------+-----------------------+-------------------+-----------+-------------|
-|         0 |             92.727274 |              75.0 | 83.863637 |       88489 |
-|         1 |             83.636360 |              85.0 |  84.31818 |       84385 |
-|         2 |             89.090910 |              77.5 | 83.295455 |       92522 |
-|         3 |             88.181820 |              80.0 |  84.09091 |       87733 |
-|         4 |             88.181820 |              77.5 |  82.84091 |       89318 |
+|         0 |             90.000000 |              85.0 | 87.500000 |       84254 |
+|         1 |             86.363640 |              67.5 | 76.931820 |       93324 |
+|         2 |             95.454544 |              80.0 | 87.727272 |       91918 |
+|         3 |             90.000000 |              80.0 | 85.000000 |       88850 |
+|         4 |             86.363640 |              82.5 | 84.431820 |       86251 |
 |-----------+-----------------------+-------------------+-----------+-------------|
-|     Media |             88.363637 |               79. | 83.681818 |     88489.4 |
+|     Media |             89.636365 |              79.0 | 84.318182 |     88919.4 |
 |-----------+-----------------------+-------------------+-----------+-------------|
 #+TBLFM: @7$6=vmean(@2..@6)::@2$4=vmean($2..$3)::@3$4=vmean($2..$3)::@4$4=vmean($2..$3)::@5$4=vmean($2..$3)::@6$4=vmean($2..$3)::@7$2=vmean(@2..@6)::@7$3=vmean(@2..@6)::@7$4=vmean(@2..@6)::@7$5=vmean(@2..@6)
 
 *Colposcopy*
-|-----------+-----------------------+-------------------+------------+-------------|
-| Partición | Tasa de clasificación | Tasa de reducción |   Agregado | Tiempo (ms) |
-|-----------+-----------------------+-------------------+------------+-------------|
-|         0 |             0.7457627 |         0.7419355 |  0.7438491 |       43545 |
-|         1 |            0.68421054 |         0.6451613 | 0.66468592 |       48643 |
-|         2 |             0.7017544 |         0.6935484 |  0.6976514 |       50231 |
-|         3 |             0.7368421 |         0.6935484 | 0.71519525 |       45194 |
-|         4 |             0.7719298 |         0.7580645 | 0.76499715 |       39518 |
-|-----------+-----------------------+-------------------+------------+-------------|
-|     Media |            0.72809991 |        0.70645162 | 0.71727576 |     45426.2 |
-|-----------+-----------------------+-------------------+------------+-------------|
+|-----------+-----------------------+-------------------+-----------+-------------|
+| Partición | Tasa de clasificación | Tasa de reducción |  Agregado | Tiempo (ms) |
+|-----------+-----------------------+-------------------+-----------+-------------|
+|         0 |             76.271190 |         77.419350 | 76.845270 |       37297 |
+|         1 |             64.912285 |         67.741936 | 66.327111 |       39354 |
+|         2 |             70.175440 |         79.032260 | 74.603850 |       38267 |
+|         3 |             77.192980 |         66.129036 | 71.661008 |       40284 |
+|         4 |             78.947370 |         72.580650 | 75.764010 |       39160 |
+|-----------+-----------------------+-------------------+-----------+-------------|
+|     Media |             73.499853 |         72.580646 | 73.040250 |     38872.4 |
+|-----------+-----------------------+-------------------+-----------+-------------|
 #+TBLFM: @7$6=vmean(@2..@6)::@2$4=vmean($2..$3)::@3$4=vmean($2..$3)::@4$4=vmean($2..$3)::@5$4=vmean($2..$3)::@6$4=vmean($2..$3)::@7$2=vmean(@2..@6)::@7$3=vmean(@2..@6)::@7$4=vmean(@2..@6)::@7$5=vmean(@2..@6)
 
 *Ionosphere*
-|-----------+-----------------------+-------------------+------------+-------------|
-| Partición | Tasa de clasificación | Tasa de reducción |   Agregado | Tiempo (ms) |
-|-----------+-----------------------+-------------------+------------+-------------|
-|         0 |              0.943662 |        0.85294116 | 0.89830158 |       30303 |
-|         1 |                   0.8 |         0.7941176 |  0.7970588 |       34016 |
-|         2 |            0.85714287 |        0.88235295 | 0.86974791 |       34843 |
-|         3 |            0.94285715 |        0.85294116 | 0.89789916 |       29651 |
-|         4 |             0.9142857 |         0.7941176 | 0.85420165 |       30424 |
-|-----------+-----------------------+-------------------+------------+-------------|
-|     Media |            0.89158954 |        0.83529409 | 0.86344182 |     31847.4 |
-|-----------+-----------------------+-------------------+------------+-------------|
+|-----------+-----------------------+-------------------+-----------+-------------|
+| Partición | Tasa de clasificación | Tasa de reducción |  Agregado | Tiempo (ms) |
+|-----------+-----------------------+-------------------+-----------+-------------|
+|         0 |             94.366196 |          85.29411 | 89.830153 |       29210 |
+|         1 |             85.714290 |          88.23530 | 86.974795 |       29075 |
+|         2 |             80.000000 |          85.29411 | 82.647055 |       29662 |
+|         3 |             91.428570 |          85.29411 | 88.361340 |       29877 |
+|         4 |             92.857140 |          82.35294 | 87.605040 |       35558 |
+|-----------+-----------------------+-------------------+-----------+-------------|
+|     Media |             88.873239 |         85.294114 | 87.083677 |     30676.4 |
+|-----------+-----------------------+-------------------+-----------+-------------|
 #+TBLFM: @7$6=vmean(@2..@6)::@2$4=vmean($2..$3)::@3$4=vmean($2..$3)::@4$4=vmean($2..$3)::@5$4=vmean($2..$3)::@6$4=vmean($2..$3)::@7$2=vmean(@2..@6)::@7$3=vmean(@2..@6)::@7$4=vmean(@2..@6)::@7$5=vmean(@2..@6)
 \clearpage
+
+*** Evolución Diferencial 2 F = 1.0
+*Texture*
+|-----------+-----------------------+-------------------+-----------+-------------|
+| Partición | Tasa de clasificación | Tasa de reducción |  Agregado | Tiempo (ms) |
+|-----------+-----------------------+-------------------+-----------+-------------|
+|         0 |             90.000000 |              87.5 | 88.750000 |      127358 |
+|         1 |             91.818184 |              87.5 | 89.659092 |      112729 |
+|         2 |             94.545456 |              87.5 | 91.022728 |      113849 |
+|         3 |             88.181816 |              87.5 | 87.840908 |      116772 |
+|         4 |             90.000000 |              87.5 | 88.750000 |       92611 |
+|-----------+-----------------------+-------------------+-----------+-------------|
+|     Media |             90.909091 |              87.5 | 89.204546 |    112663.8 |
+|-----------+-----------------------+-------------------+-----------+-------------|
+#+TBLFM: @7$6=vmean(@2..@6)::@2$4=vmean($2..$3)::@3$4=vmean($2..$3)::@4$4=vmean($2..$3)::@5$4=vmean($2..$3)::@6$4=vmean($2..$3)::@7$2=vmean(@2..@6)::@7$3=vmean(@2..@6)::@7$4=vmean(@2..@6)::@7$5=vmean(@2..@6)
+
+*Colposcopy*
+|-----------+-----------------------+-------------------+-----------+-------------|
+| Partición | Tasa de clasificación | Tasa de reducción |  Agregado | Tiempo (ms) |
+|-----------+-----------------------+-------------------+-----------+-------------|
+|         0 |             72.881355 |         91.935486 | 82.408421 |       35235 |
+|         1 |             71.929825 |         87.096770 | 79.513298 |       36646 |
+|         2 |             61.403507 |         90.322580 | 75.863044 |       37674 |
+|         3 |             70.175440 |         91.935486 | 81.055463 |       38194 |
+|         4 |             71.929825 |         95.161285 | 83.545555 |       37163 |
+|-----------+-----------------------+-------------------+-----------+-------------|
+|     Media |             69.663990 |         91.290321 | 80.477156 |     36982.4 |
+|-----------+-----------------------+-------------------+-----------+-------------|
+#+TBLFM: @7$6=vmean(@2..@6)::@2$4=vmean($2..$3)::@3$4=vmean($2..$3)::@4$4=vmean($2..$3)::@5$4=vmean($2..$3)::@6$4=vmean($2..$3)::@7$2=vmean(@2..@6)::@7$3=vmean(@2..@6)::@7$4=vmean(@2..@6)::@7$5=vmean(@2..@6)
+
+*Ionosphere*
+|-----------+-----------------------+-------------------+-----------+-------------|
+| Partición | Tasa de clasificación | Tasa de reducción |  Agregado | Tiempo (ms) |
+|-----------+-----------------------+-------------------+-----------+-------------|
+|         0 |              88.73239 |          91.17647 | 89.954430 |       28543 |
+|         1 |              78.57143 |          91.17647 | 84.873950 |       30033 |
+|         2 |              90.00000 |          91.17647 | 90.588235 |       29327 |
+|         3 |              90.00000 |          88.23530 | 89.117650 |       29380 |
+|         4 |              85.71429 |          91.17647 | 88.445380 |       32329 |
+|-----------+-----------------------+-------------------+-----------+-------------|
+|     Media |             86.603622 |         90.588236 | 88.595929 |     29922.4 |
+|-----------+-----------------------+-------------------+-----------+-------------|
+#+TBLFM: @7$6=vmean(@2..@6)::@2$4=vmean($2..$3)::@3$4=vmean($2..$3)::@4$4=vmean($2..$3)::@5$4=vmean($2..$3)::@6$4=vmean($2..$3)::@7$2=vmean(@2..@6)::@7$3=vmean(@2..@6)::@7$4=vmean(@2..@6)::@7$5=vmean(@2..@6)
+\clearpage
+
+*** Evolución Diferencial 2 (Pesos iniciales de  RELIEF)
+*Texture*
+|-----------+-----------------------+-------------------+-----------+-------------|
+| Partición | Tasa de clasificación | Tasa de reducción |  Agregado | Tiempo (ms) |
+|-----------+-----------------------+-------------------+-----------+-------------|
+|         0 |             88.181816 |              85.0 | 86.590908 |       82416 |
+|         1 |             88.181816 |              87.5 | 87.840908 |       87006 |
+|         2 |             92.727270 |              85.0 | 88.863635 |       85753 |
+|         3 |             87.272730 |              87.5 | 87.386365 |       89048 |
+|         4 |             89.090904 |              87.5 | 88.295452 |       82813 |
+|-----------+-----------------------+-------------------+-----------+-------------|
+|     Media |             89.090907 |              86.5 | 87.795454 |     85407.2 |
+|-----------+-----------------------+-------------------+-----------+-------------|
+#+TBLFM: @7$6=vmean(@2..@6)::@2$4=vmean($2..$3)::@3$4=vmean($2..$3)::@4$4=vmean($2..$3)::@5$4=vmean($2..$3)::@6$4=vmean($2..$3)::@7$2=vmean(@2..@6)::@7$3=vmean(@2..@6)::@7$4=vmean(@2..@6)::@7$5=vmean(@2..@6)
+
+*Colposcopy*
+|-----------+-----------------------+-------------------+-----------+-------------|
+| Partición | Tasa de clasificación | Tasa de reducción |  Agregado | Tiempo (ms) |
+|-----------+-----------------------+-------------------+-----------+-------------|
+|         0 |             69.491520 |         93.548386 | 81.519953 |       36490 |
+|         1 |             66.666670 |         93.548386 | 80.107528 |       37465 |
+|         2 |             70.175440 |         95.161285 | 82.668363 |       35676 |
+|         3 |             66.666670 |         93.548386 | 80.107528 |       34556 |
+|         4 |             71.929825 |         93.548386 | 82.739106 |       38325 |
+|-----------+-----------------------+-------------------+-----------+-------------|
+|     Media |             68.986025 |         93.870966 | 81.428496 |     36502.4 |
+|-----------+-----------------------+-------------------+-----------+-------------|
+#+TBLFM: @7$6=vmean(@2..@6)::@2$4=vmean($2..$3)::@3$4=vmean($2..$3)::@4$4=vmean($2..$3)::@5$4=vmean($2..$3)::@6$4=vmean($2..$3)::@7$2=vmean(@2..@6)::@7$3=vmean(@2..@6)::@7$4=vmean(@2..@6)::@7$5=vmean(@2..@6)
+
+*Ionosphere*
+|-----------+-----------------------+-------------------+-----------+-------------|
+| Partición | Tasa de clasificación | Tasa de reducción |  Agregado | Tiempo (ms) |
+|-----------+-----------------------+-------------------+-----------+-------------|
+|         0 |             90.140850 |         91.176470 | 90.658660 |       28442 |
+|         1 |             82.857150 |         91.176470 | 87.016810 |       34111 |
+|         2 |             82.857150 |         91.176470 | 87.016810 |       28489 |
+|         3 |             94.285710 |         94.117645 | 94.201678 |       31317 |
+|         4 |             81.428566 |         91.176470 | 86.302518 |       28948 |
+|-----------+-----------------------+-------------------+-----------+-------------|
+|     Media |             86.313885 |         91.764705 | 89.039295 |     30261.4 |
+|-----------+-----------------------+-------------------+-----------+-------------|
+#+TBLFM: @7$6=vmean(@2..@6)::@2$4=vmean($2..$3)::@3$4=vmean($2..$3)::@4$4=vmean($2..$3)::@5$4=vmean($2..$3)::@6$4=vmean($2..$3)::@7$2=vmean(@2..@6)::@7$3=vmean(@2..@6)::@7$4=vmean(@2..@6)::@7$5=vmean(@2..@6)
+\clearpage
+
 ** Tablas generales por conjunto de datos.
 *** Texture 
 |------------------+-------------+-----------+-------------+-------------+------------|
@@ -1864,10 +2320,18 @@ Respecto a las tablas de la segunda práctica, se encuentran en el msimo formato
 | AGE-CA           |   85.818180 |      77.5 |   81.659093 |      104484 | -          |
 | AGE-BLX          |   89.636364 |      80.5 |   85.068182 |     94626.4 | -          |
 | Memético 1       |   88.181820 |      86.0 |   87.090910 |     88259.8 | -          |
-| Memético 1 2     |   90.363638 |      86.5 | *88.431819* |     87278.4 | -          |
+| Memético 1 2     |   90.363638 |      86.5 |   88.431819 |     87278.4 | -          |
 | Memético 2       |   88.727276 |      85.5 |   87.113638 |     84607.2 | -          |
 | Memético 3       |   90.363638 |      85.5 |   87.931819 |       84016 | -          |
-| Memético 3 2     |   89.272730 |      87.0 |   88.136565 |     81900.6 |            |
+| Memético 3 2     |   89.272730 |      87.0 |   88.136565 |     81900.6 | -          |
+| ES               |   89.636365 |      87.0 |   88.318182 |     82608.2 | -          |
+| ES 2             |   90.545456 |      87.0 |   88.772728 |       82308 | -          |
+| ILS              |   88.727274 |      87.0 |   87.863637 |       88085 | -          |
+| ILS 2            |   89.636366 |      87.0 |   88.318183 |     75915.8 | -          |
+| ED 1             |   91.454544 |      87.5 | *89.477272* |     85872.4 |            |
+| ED 2             |   89.636365 |      79.0 |   84.318182 |     88919.4 |            |
+| ED 2 (F=1)       |   90.909091 |      87.5 |   89.204546 |    112663.8 | -          |
+| ED 2 1           |   89.090907 |      86.5 |   87.795454 |     85407.2 |            |
 |------------------+-------------+-----------+-------------+-------------+------------|
 *** Colposcopy 
 |------------------+-------------+-------------+-------------+-------------+------------|
@@ -1879,7 +2343,7 @@ Respecto a las tablas de la segunda práctica, se encuentran en el msimo formato
 | Greedy           |   67.523045 | *98.387100* |   82.955073 |           1 | 0          |
 | Búsqueda local   |   75.254238 |   77.741935 |   76.498086 |        9379 | 64.8       |
 | Búsqueda local 2 |   75.967886 |   84.516127 |   80.242007 |      6964.8 | 59.2       |
-| Búsqueda local 3 |   73.113292 |   93.548387 | *83.169549* |        5417 | 8.8        |
+| Búsqueda local 3 |   73.113292 |   93.548387 |   83.169549 |        5417 | 8.8        |
 | AGG-CA           |   74.915254 |   60.645155 |   67.782050 |     46093.6 | -          |
 | AGG-BLX          |   74.540589 |   75.161290 |   74.850939 |     41007.8 | -          |
 | AGE-CA           |   72.447222 |   63.870971 |   68.159097 |       43980 | -          |
@@ -1889,8 +2353,17 @@ Respecto a las tablas de la segunda práctica, se encuentran en el msimo formato
 | Memético 2       |   74.927149 |   82.250864 |   78.592607 |     37018.8 | -          |
 | Memético 3       | *77.347606* |   84.838709 |   81.093158 |     35999.6 | -          |
 | Memético 3 2     |   73.511745 |   91.612904 |   82.562324 |     35737.4 | -          |
+| ES               |   72.108237 |   87.419354 |   79.763796 |       41966 | -          |
+| ES 2             |   72.471010 |   88.387096 |   80.429053 |     36783.8 | -          |
+| ILS              |   74.552483 |   84.516127 |   79.534305 |     42521.2 | -          |
+| ILS 2            |   72.821886 |   92.258066 |   82.539976 |       33819 | -          |
+| ED 1             |   73.559324 |   94.193546 | *83.876435* |     38372.6 |            |
+| ED 2             |   73.499853 |   72.580646 |   73.040250 |     38872.4 |            |
+| ED 2 (F=1)       |   69.663990 |   91.290321 |   80.477156 |     36982.4 |            |
+| ED 2 1           |   68.986025 |   93.870966 |   81.428496 |     36502.4 |            |
 |------------------+-------------+-------------+-------------+-------------+------------|
-*** Ionosphere
+
+*** Ionsphere
 |------------------+-------------+-------------+-------------+-------------+------------|
 | Algoritmo        |  Tasa clas. |   Tasa red. |    Agregado | Tiempo (ms) | Mutaciones |
 |------------------+-------------+-------------+-------------+-------------+------------|
@@ -1902,7 +2375,7 @@ Respecto a las tablas de la segunda práctica, se encuentran en el msimo formato
 | Búsqueda local 2 |   87.179074 |   85.882352 |   86.526689 |      4874.8 | 63.6       |
 | Búsqueda local 3 |   87.166996 |   90.000000 |   88.583498 |      2342.6 | 11.8       |
 | AGG-CA           |   86.623741 |   74.117647 |   80.370694 |       37919 | -          |
-| AGG-BLX          |   89.171026 |   88.235294 | *88.703160* |       32942 | -          |
+| AGG-BLX          |   89.171026 |   88.235294 |   88.703160 |       32942 | -          |
 | AGE-CA           |   88.036218 |   71.176471 |   79.606344 |     35774.8 | -          |
 | AGE-BLX          | *90.020119* |   81.764705 |   85.892413 |       31704 | -          |
 | Memético 1       |   84.325956 |   89.411764 |   86.868861 |     30965.8 | -          |
@@ -1910,6 +2383,14 @@ Respecto a las tablas de la segunda práctica, se encuentran en el msimo formato
 | Memético 2       |   87.179075 |   88.823530 |   88.001303 |       29515 | -          |
 | Memético 3       |   86.611670 |   88.823530 |   87.717600 |       32329 | -          |
 | Memético 3 2     |   85.484908 |   90.588235 |   88.035720 |       29601 | -          |
+| ES               |   88.317906 |   89.411765 |   88.864836 |       26568 | -          |
+| ES 2             |   87.183098 |   90.000000 |   88.591549 |     27907.8 | -          |
+| ILS              |   87.183097 |   90.000000 |   88.591549 |     26772.4 | -          |
+| ILS 2            |   89.448692 |   90.588235 | *90.018464* |     22692.8 | -          |
+| ED 1             |   86.032194 |   91.176470 |   88.604332 |     30495.2 |            |
+| ED 2             |   88.873239 |   85.294114 |   87.083677 |     30676.4 |            |
+| ED 2 (F = 1)     |   86.603622 |   90.588236 |   88.595929 |     29922.4 |            |
+| ED 2 1           |   86.313885 |   91.764705 |   89.039295 |     30261.4 |            |
 |------------------+-------------+-------------+-------------+-------------+------------|
 
 \clearpage
@@ -2029,3 +2510,57 @@ Respecto a los resultados en el agregado, en ~Texture~ el mejor resultado lo ha 
 En el último conjunto de datos, el mejor resultado lo tiene el AGG-BLX volviendo a quedarse muy cerca todos los meméticos.
 
 En resumen, podemos ver que los resultados de los meméticos son mejores que los de los algoritmos genéticos, y que aunque los segundos a veces sacan un mejor resultado, los meméticos no se quedan muy lejos. El tiempo de ejecución de todos es similar como cabría esperar y bastante mayor que la búsqueda local. Con lo cual en estos 3 conjuntos de datos vemos que si nos importa el tiempo de ejecución de nuestro algoritmo deberiamos quitarle llamadas a la función de evaluacion a los meméticos (ya que se estancan muy rapido y no salen de ahí) o cambiar el criterio de parada a uno que considere que se ha estancado el tiempo suficiente.
+\clearpage
+** Análisis de los resultados (Práctica 3)
+
+Lo primero a notar es que todos los nuevos algoritmos dan resultados parecidos en todos los conjuntos de datos, siendo estos mejores que los algoritmos de la práctica 1 y muy parecidos a los mejores resultados de los genéticos y meméticos. Cabe destacar que el mejor resultado en la tasa de agregado lo tiene un algoritmo de esta última práctica en los tres conjuntos de datos.
+
+Comencemos con el algoritmo de *enfriamiento simulado*, lo primero a notar es que ha sido necesario modificar el criterio de metrópolis ya que de no hacerlo se realizaban demasiados enfriamientos y los resultados no eran buenos, tras hacer el cambio los resultados superaron a la mayoria de los algoritmos incluidos RELIEF y la búsqueda local quedándose a la par con los algoritmos meméticos. Por lo general los resultados son mejores cuando comenzamos la ejecución de este algoritmo con el vector de pesos resultante del algoritmo RELIEF ya que partimos de una solución mejor.
+Sin embargo la diferencia no llega a ser significativa, en el mejor caso encontramos una mejora de 0.7 puntos e incluso en ~Ionosphere~ los resultados son un poco peores.
+
+Estudiemos ahora loss resultados obtenidos por la *búsqueda local iterada*, como cabría esperar los resultados son mejores que los de la búsqueda local normal, aunque en el caso de la búsqueda local que comienza con los pesos del algoritmo greedy (Búsqueda local 3), la diferencia no es tan grande.
+Como en la búsqueda local clásica el hecho de iniciar el algoritmo con un vector de pesos bueno conllevó mejores resultados nos podemos preguntar si en este caso tambíen ocurirá. Al hacerlo vemos que los resultados son mejores en todos los conjuntos de datos y que la diferencia es mayor de la que era en el enfriamiento simulado llegando a ser de un 2%.
+
+ Si comparamos los resultados de la búsqueda local clásica 3 y la búsqueda local iterada con los pesos iniciales de Greedy (ILS 2) vemos que tienen resultados muy parejos. El primero de estos coge el vector de pesos resultante de aplicar el algoritmo greedy y realiza una búsqueda local de 15000 iteraciones sobre él, mientras que el segundo realiza una de 1000 sobre el resultado de RELIEF y luego realiza mutaciones, por ello no es imperativo que los resultados del segundo sean mejores que los del primero (como en ~Colposcopy~). Aún así en el caso de ~Ionosphere~ este segundo a obtenido el mejor resultado de todos los algoritmos que se han desarrollado (90).
+
+Discutamos ahora los resultados de la *evolución diferencial*, los resultados de la variante aleatoria de este tienen muy buenos resultados, siendo el mejor de los algoritmos en los conjuntos de datos ~Texture~ y ~Colposcopy~. Sin embargo, si miramos los resultados de la variande de ``el mejor'', los resultamos no son buenos y son peores que muchos de los algoritmos. Si miramos detenidamente los resultados nos damos cuenta de que el problema reside en que la tasa de reducción resulta demasiado baja, esto se puede deber a un valor demasiado bajo de la variable ~F~. 
+
+Vamos a hacer una prueba de alterar el valor de ~F~. Los valores resultantes de ejecutarlo en ~Texture~ han sido:
+
++ 0.2: 79.250000 
++ 0.4: 83.340909 
++ 0.6: 86.886363
++ 0.8: 88.590909 
++ 1.0: 89.204546 
++ 1.2: 89.022727 
++ 1.4: 89.113637 
++ 1.6: 87.204546
++ 1.8: 88.295455 
++ 2.0: 88.840910
+
+En este punto realicé el resto de ejecuciones con un valor de ~F = 1.0~. Es cierto que si comparamos los resultados con los de la ejecución con ~F=0.5~ los resultados son mucho mejores y se parecen más a los del resto de algoritmos, sin embargo, siguen sin ser superiores a su variante aleatoria.
+
+Mirando la ejecución del algoritmo me di cuenta de que el crecimiento es algo lento, probablemente porque el vector de pesos inicial utilizado para mutar no es muy bueno. Entonces decidí añadir uno que si lo fuera. El resultado ha sido un crecimiento mucho mas rápido (aunque también se estancaba antes) y unos resultados a la par de el resto de algoritmos aunque quedandose aún uno o dos puntos por debajo del mejor de ellos.
+
+Comparemos ahora el crecimiento de los pesos en los algoritmo evolutivos.
+
+#+CAPTION: Aleatorio
+#+NAME: Aleatorio
+#+ATTR_LaTeX: :placement [!h]
+#+attr_latex: :width 450px
+[[./rand.png]]
+
+#+CAPTION: El mejor
+#+NAME: El mejor
+#+ATTR_LaTeX: :placement [!h]
+#+attr_latex: :width 450px
+[[./best_normal.png]]
+
+#+CAPTION: El mejor con pesos iniciales
+#+NAME: El mejor con pesos iniciales
+#+ATTR_LaTeX: :placement [!h]
+#+attr_latex: :width 450px
+[[./best_alter.png]]
+
+Como podemos ver la version de ``el mejor'' converge mucho mas rápido a un valor que la alternativa aleatoria, el hecho de añadir el vector de pesos a la población inicial hace que converja mas lentamente.
+en la gráfica de la versión aleatoria vemos como existe mucha mas diversidad de pesos y que incluso al final de la ejecución del algoritmo aún existen distintos elementos, mientras que en los otros la población se estanca en el máximo local antes de la mtiad de las evaluaciones.

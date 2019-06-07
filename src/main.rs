@@ -1514,11 +1514,14 @@ pub fn annealing<T: Data<T> + Clone + Copy>(
     cooling_type: usize,
     rng: &mut StdRng,
 ) -> Vec<f32> {
-    let mut best_solution: Vec<f32> = vec![0.0; n_attrs];
-    let uniform = Uniform::new(0.0, 1.0);
-    for attr in 0..n_attrs {
-        best_solution[attr] += uniform.sample(rng);
-    }
+    //let mut best_solution: Vec<f32> = vec![0.0; n_attrs];
+    //let uniform = Uniform::new(0.0, 1.0);
+    //for attr in 0..n_attrs {
+    //    best_solution[attr] += uniform.sample(rng);
+    //}
+
+    let mut best_solution: Vec<f32> = calculate_relief_weights(training, n_attrs);
+
     let mut best_cost =
         1.0 - classifier_1nn(training, training, &best_solution, true).evaluation_function();
     let mut actual_solution = best_solution.clone();
@@ -1535,10 +1538,10 @@ pub fn annealing<T: Data<T> + Clone + Copy>(
     'outer: loop {
         let mut n_success = 0;
         for _ in 0..max_neighbours {
-            println!(
-            "Valor: {}\nTemperatura: {}\nTemperatura final: {}\nNúmero de exitos: {}\nNúmero llamadas a la funcion de evaluación: {}",
-            best_cost, temp, final_temp, n_success, n_calls_to_ev
-            );
+            // println!(
+            // "Valor: {}\nTemperatura: {}\nTemperatura final: {}\nNúmero de exitos: {}\nNúmero llamadas a la funcion de evaluación: {}",
+            // best_cost, temp, final_temp, n_success, n_calls_to_ev
+            // );
             let mut neighbour = actual_solution.clone();
             // NOTE Misma mutación que en las otras practicas.
             mutate_weights(&mut neighbour, 0.3, rng.gen_range(0, n_attrs), rng);
@@ -1547,6 +1550,7 @@ pub fn annealing<T: Data<T> + Clone + Copy>(
                 1.0 - classifier_1nn(training, training, &neighbour, true).evaluation_function();
             n_calls_to_ev += 1;
             let dif = neighbour_cost - actual_cost;
+
             if metrop(dif, temp, rng) {
                 n_success += 1;
                 actual_cost = neighbour_cost;
@@ -1557,6 +1561,7 @@ pub fn annealing<T: Data<T> + Clone + Copy>(
                     best_solution = neighbour;
                 }
             }
+
             if n_calls_to_ev >= 15000 {
                 break 'outer; // NOTE break outer loop.
             }
@@ -1585,28 +1590,28 @@ pub fn iterated_local_search<T: Data<T> + Clone + Copy>(
     training: &Vec<T>,
     rng: &mut StdRng,
 ) -> Vec<f32> {
-    let mut best_weights: Vec<f32> = vec![0.0; n_attrs];
-    let uniform = Uniform::new(0.0, 1.0);
-    for attr in 0..n_attrs {
-        best_weights[attr] += uniform.sample(rng);
-    }
+    //let mut best_weights: Vec<f32> = vec![0.0; n_attrs];
+    // let uniform = Uniform::new(0.0, 1.0);
+    // for attr in 0..n_attrs {
+    //     best_weights[attr] += uniform.sample(rng);
+    // }
 
-    // let now = Instant::now();
+    //let mut best_weights: Vec<f32> = calculate_relief_weights(training, n_attrs);
+
+    let mut best_weights: Vec<f32> = alter_greedy_weights(training, n_attrs);
     let mut best_results = classifier_1nn(training, training, &best_weights, true);
-    // println!("{}", now.elapsed().as_millis());
-    // let now = Instant::now();
     local_search(
         training,
         n_attrs,
         &mut best_weights,
         &mut best_results,
-        1000,
+        999,
         rng,
         true,
     );
     // println!("{}", now.elapsed().as_millis());
     for _ in 0..14 {
-        // println!("Mejor: {}", best_results);
+        println!("Mejor: {}", best_results);
         let mut muted_weights = best_weights.clone();
         let indexes = (0..n_attrs).choose_multiple(rng, n_attrs / 10);
         for index in indexes {
@@ -1620,7 +1625,7 @@ pub fn iterated_local_search<T: Data<T> + Clone + Copy>(
             n_attrs,
             &mut muted_weights,
             &mut muted_results,
-            1000,
+            999,
             rng,
             true,
         );
@@ -1645,13 +1650,18 @@ pub fn de_rand_iteration<T: Data<T> + Copy + Clone>(
     let mut new_generation: Vec<Chromosome> = Vec::new();
 
     for index in 0..generation_size {
-        let parents: Vec<Chromosome> = generation.choose_multiple(rng, 3).cloned().collect();
+        let mut possible_parents = generation.clone();
+        possible_parents.remove(index);
+        let parents: Vec<Chromosome> = possible_parents.choose_multiple(rng, 3).cloned().collect();
+
         let mut offspring = vec![0.0; n_attrs];
+        let random_gene = rng.gen_range(0, n_attrs);
+
         for attr in 0..n_attrs {
-            if uniform.sample(rng) < 0.5 {
+            if uniform.sample(rng) < 0.5 || attr == random_gene {
                 offspring[attr] = truncate(
                     parents[0].weights[attr]
-                        + 0.5 * (parents[1].weights[attr] - parents[2].weights[attr]),
+                        + (parents[1].weights[attr] - parents[2].weights[attr]),
                 );
             } else {
                 offspring[attr] = generation[index].weights[attr];
@@ -1675,14 +1685,19 @@ pub fn de_best_iteration<T: Data<T> + Copy + Clone>(
     let best = generation.last().unwrap();
 
     for index in 0..generation_size {
-        let parents: Vec<Chromosome> = generation.choose_multiple(rng, 2).cloned().collect();
+        let mut possible_parents = generation.clone();
+        possible_parents.remove(index);
+        let parents: Vec<Chromosome> = possible_parents.choose_multiple(rng, 2).cloned().collect();
+
         let mut offspring = vec![0.0; n_attrs];
+        let random_gene = rng.gen_range(0, n_attrs);
+
         for attr in 0..n_attrs {
-            if uniform.sample(rng) < 0.5 {
+            if uniform.sample(rng) < 0.5 || attr == random_gene {
                 offspring[attr] = truncate(
                     generation[index].weights[attr]
-                        + 0.5 * (best.weights[attr] - generation[index].weights[attr])
-                        + 0.5 * (parents[0].weights[attr] - parents[1].weights[attr]),
+                        + 1.0 * (best.weights[attr] - generation[index].weights[attr])
+                        + 1.0 * (parents[0].weights[attr] - parents[1].weights[attr]),
                 );
             } else {
                 offspring[attr] = generation[index].weights[attr];
@@ -1708,22 +1723,23 @@ pub fn diferential_evolution<T: Data<T> + Clone + Copy>(
             .into_iter()
             .collect();
 
+    generation.sort();
+
+    // generation.remove(generation.len() - 1);
+    // let w = alter_greedy_weights(training, n_attrs);
+    // generation.push(Chromosome::new(
+    //     &w,
+    //     classifier_1nn(training, training, &w, true).evaluation_function(),
+    // ));
+    // generation.sort();
+
     let mut n_evaluations = generation_size;
+    let mut c = 1;
     loop {
-        // println!(
-        //     "Peor: {}\nMejor: {}",
-        //     generation.first().unwrap().result,
-        //     generation.last().unwrap().result
-        // );
-        // for a in generation.iter() {
-        //     println!("{}", a.result);
-        // }
-        // println!("\n");
-        // println!(
-        //     "Iteration {} Best: {}",
-        //     n_evaluations,
-        //     generation.last().unwrap().result
-        // );
+        for a in generation.iter() {
+            println!("{} {}", c, a.result);
+        }
+        println!("\n");
         let new_generation = iteration(training, &generation, generation_size, n_attrs, rng);
 
         for index in 0..generation_size {
@@ -1731,13 +1747,12 @@ pub fn diferential_evolution<T: Data<T> + Clone + Copy>(
                 generation[index] = new_generation[index].clone();
             }
         }
-
         generation.sort();
-
         n_evaluations += generation_size;
         if n_evaluations >= 15000 {
             break;
         }
+        c += 1;
     }
 
     return generation.last().unwrap().weights.clone();
@@ -1784,8 +1799,8 @@ pub fn run_p3<T: Data<T> + Clone + Copy>(
 
     let do_es = false;
     let do_ils = false;
-    let do_de1 = false;
-    let do_de2 = true;
+    let do_de1 = true;
+    let do_de2 = false;
 
     let mut table_es = Table::new();
     table_es.add_row(row![
@@ -1819,9 +1834,9 @@ pub fn run_p3<T: Data<T> + Clone + Copy>(
 
             table_es.add_row(row![
                 i,
-                res.success_percentage(),
-                res.reduction_rate(),
-                res.evaluation_function(),
+                100.0 * res.success_percentage(),
+                100.0 * res.reduction_rate(),
+                100.0 * res.evaluation_function(),
                 now.elapsed().as_millis()
             ]);
         }
@@ -1837,9 +1852,9 @@ pub fn run_p3<T: Data<T> + Clone + Copy>(
 
             table_ils.add_row(row![
                 i,
-                res.success_percentage(),
-                res.reduction_rate(),
-                res.evaluation_function(),
+                100.0 * res.success_percentage(),
+                100.0 * res.reduction_rate(),
+                100.0 * res.evaluation_function(),
                 now.elapsed().as_millis()
             ]);
         }
@@ -1855,9 +1870,9 @@ pub fn run_p3<T: Data<T> + Clone + Copy>(
 
             table_de1.add_row(row![
                 i,
-                res.success_percentage(),
-                res.reduction_rate(),
-                res.evaluation_function(),
+                100.0 * res.success_percentage(),
+                100.0 * res.reduction_rate(),
+                100.0 * res.evaluation_function(),
                 now.elapsed().as_millis()
             ]);
         }
@@ -1873,12 +1888,13 @@ pub fn run_p3<T: Data<T> + Clone + Copy>(
 
             table_de2.add_row(row![
                 i,
-                res.success_percentage(),
-                res.reduction_rate(),
-                res.evaluation_function(),
+                100.0 * res.success_percentage(),
+                100.0 * res.reduction_rate(),
+                100.0 * res.evaluation_function(),
                 now.elapsed().as_millis()
             ]);
         }
+        break;
     }
 
     if do_es {
@@ -1909,9 +1925,9 @@ fn main() {
     }
     let mut rng: StdRng = SeedableRng::seed_from_u64(seed);
 
-    let do_texture = false;
+    let do_texture = true;
     let do_colpos = false;
-    let do_iono = true;
+    let do_iono = false;
 
     println!("# Current Results.");
     if do_texture {
